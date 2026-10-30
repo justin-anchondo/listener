@@ -94,6 +94,7 @@ Goal: prove the phone can hold a live transcription stream for a full call.
 
 - Next.js and TypeScript scaffold, Vitest, Playwright, config loader with schema validation.
 - Server route that issues a Deepgram temporary token. The phone never sees the API key.
+- Interim access gate: one long passphrase (`LISTENER_ACCESS_CODE`) unlocks a signed, expiring cookie, so nobody else can spend Deepgram credit through the token route. Replaced by passkeys in Phase 2.
 - Capture screen: start and stop, mic stream to Deepgram, live transcript with speaker labels, wake lock, recording indicator, elapsed time.
 - Reconnect on socket drop with a new token. Silence and stall detection with an on screen alert.
 - Nothing is stored. Transcript lives in page memory only.

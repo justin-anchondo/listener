@@ -70,6 +70,7 @@ Confidentiality outranks convenience. When a feature and the security rules in s
 
 - The vendor's diarization labels speakers as Speaker 0, Speaker 1, and so on.
 - After the meeting, the owner can map labels to names. "Me" is a reserved label for the owner, used by the feedback step.
+- Speaker labels are per meeting only. Listener never creates, stores, or requests voiceprints or any other biometric identifier, and never recognizes speakers across meetings by voice. Name mapping is manual.
 
 ## 4. Assistance
 
