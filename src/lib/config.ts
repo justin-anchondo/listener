@@ -15,7 +15,6 @@ const configSchema = z.object({
     session_idle_minutes: z.number().int().positive(),
     signup_enabled: z.literal(false),
     cipher: z.literal("aes-256-gcm"),
-    consent_reminder_per_client: z.boolean(),
   }),
   access_gate: z.object({
     min_code_length: z.number().int().min(8),

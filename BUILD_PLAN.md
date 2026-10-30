@@ -45,7 +45,7 @@ The first version does not use embeddings. One owner's data for a single client 
 src/
   app/                 Next.js routes (capture screen, dashboard, API routes)
   lib/
-    policy/            Pure functions: scoping, retention, redaction, consent. Unit tested.
+    policy/            Pure functions: scoping, retention, redaction. Unit tested.
     crypto/            Envelope encryption, per client data keys. Unit tested.
     db/                Data access layer. Every function takes client_id.
     stt/               Deepgram token issue (server), stream client (browser)
@@ -65,7 +65,7 @@ Encrypted columns end in `_enc` and hold `nonce || ciphertext || tag`, base64.
 
 | Table | Key columns | Retention |
 | --- | --- | --- |
-| clients | id, name_enc, wrapped_dek, consent_ack_at, created_at | Until deleted |
+| clients | id, name_enc, wrapped_dek, created_at | Until deleted |
 | projects | id, client_id, name_enc, brief_enc, status | Until deleted |
 | meetings | id, client_id, project_id, template, started_at, ended_at, speaker_map_enc | Until deleted |
 | transcript_segments | id, client_id, meeting_id, seq, speaker, start_ms, end_ms, text_enc, expires_at | 30 days (config) |
@@ -113,7 +113,7 @@ Done when:
 - Passkey sign in, sign up disabled, idle session timeout.
 - `src/lib/crypto`: data key generation, wrap and unwrap, field encrypt and decrypt. Tests include tamper detection and wrong key rejection.
 - `src/lib/policy`: `assertClientScope`, `computeExpiresAt`, `redact`, `isPurgeable`. Tests for each.
-- Clients and projects CRUD with consent reminder.
+- Clients and projects CRUD.
 - Start meeting with client and project selection. Final segments saved encrypted with `expires_at`.
 - Daily purge job and its audit count.
 - Logger that runs `redact` on everything.

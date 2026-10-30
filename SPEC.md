@@ -45,7 +45,6 @@ Confidentiality outranks convenience. When a feature and the security rules in s
 
 - The owner picks a client and project (the most recent one is preselected) and optionally a template, then taps Start.
 - Recording cannot start without a project. If the owner needs to start fast, they may pick an "Unsorted" project under a client and reassign it later. Reassignment between clients re-encrypts the data under the new client's key.
-- Before the first recording for a client, the app shows a one time reminder that recording consent laws may apply. The owner acknowledges once per client.
 
 ### 3.2 Audio path
 
