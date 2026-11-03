@@ -114,7 +114,7 @@ Rules:
 
 - Every transcript segment is stored with an `expires_at` computed at write time from config.
 - The purge job runs daily and hard deletes every expired row. It writes a count only to the audit log.
-- The owner can delete a meeting, a project, or a whole client at any time. Deleting a client destroys its data key (section 6.2), which makes any remaining copies, including those in database backups, unreadable.
+- The owner can delete a meeting, a project, or a whole client at any time. Deleting a client deletes its data key (section 6.2) with everything else. Database backups still hold the wrapped key until they expire, so deleted data is fully gone only after the backup retention period.
 - Database backups extend the effective life of deleted rows by the backup retention period. The deployed backup retention must be documented in BUILD_PLAN and kept as short as the hosting plan allows.
 
 ## 6. Security
@@ -122,8 +122,9 @@ Rules:
 ### 6.1 Access
 
 - Single owner account. Public sign up is disabled.
-- Sign in with a passkey (Face ID or Touch ID). Sessions expire after the configured idle time.
-- The database enforces row level security. Server routes use the owner's session, not a service key, except for the purge job.
+- Sign in with a passkey (Face ID or Touch ID). Sessions expire after the configured idle time and after an absolute maximum.
+- The access code is only used to enroll the first passkey. Once a passkey exists, more can be added only from a signed in session.
+- The database enforces row level security. Server routes connect as a restricted role that cannot bypass it, and no service key is used, including by the purge job.
 
 ### 6.2 Encryption
 
@@ -137,6 +138,7 @@ Rules:
 ### 6.3 Isolation
 
 - Every table holding client data carries `client_id`. Every query filters on it, enforced in the data access layer and by database policy.
+- The client and project picker may list all clients and projects (names only). It is the second cross client view, alongside consolidated open items.
 - Prompts sent to the model contain data from exactly one client. The consolidated open items view is built from action item fields and is never sent to a model with other clients' data in the same request.
 
 ### 6.4 Vendors and keys

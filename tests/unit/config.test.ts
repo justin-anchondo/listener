@@ -36,6 +36,6 @@ describe("config", () => {
   });
 
   it("exposes only capture and stt settings to the browser", () => {
-    expect(Object.keys(captureSettings(parseConfig(raw))).sort()).toEqual(["capture", "stt"]);
+    expect(Object.keys(captureSettings(parseConfig(raw))).sort()).toEqual(["capture", "storage", "stt", "templates"]);
   });
 });

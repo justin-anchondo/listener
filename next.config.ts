@@ -6,8 +6,7 @@ const withConfig = ["./config.yaml"];
 const nextConfig: NextConfig = {
   outputFileTracingIncludes: {
     "/": withConfig,
-    "/api/session": withConfig,
-    "/api/stt/token": withConfig,
+    "/**": withConfig,
   },
   async headers() {
     return [

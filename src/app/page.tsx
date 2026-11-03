@@ -1,15 +1,15 @@
-import { cookies } from "next/headers";
+import { hasSession } from "@/lib/auth/session";
 import { captureSettings, loadConfig } from "@/lib/config";
-import { SESSION_COOKIE } from "@/lib/policy/access";
-import { hasValidSession } from "@/lib/policy/gate";
-import AccessForm from "./AccessForm";
+import { missingSettings } from "@/lib/setup";
 import Capture from "./Capture";
+import SetupNeeded from "./SetupNeeded";
+import SignIn from "./SignIn";
 
 export const dynamic = "force-dynamic";
 
 export default async function Home() {
-  const jar = await cookies();
-  if (!hasValidSession(jar.get(SESSION_COOKIE)?.value)) return <AccessForm />;
-  const config = loadConfig();
-  return <Capture settings={captureSettings(config)} />;
+  const missing = missingSettings();
+  if (missing.length) return <SetupNeeded missing={missing} />;
+  if (!(await hasSession())) return <SignIn />;
+  return <Capture settings={captureSettings(loadConfig())} />;
 }

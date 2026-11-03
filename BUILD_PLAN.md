@@ -28,8 +28,8 @@ flowchart TD
 | Transcription | Deepgram Nova-3 streaming, diarization on, `mip_opt_out=true` | Low latency, browser WebSocket, temporary tokens |
 | Live assistant | Claude, fast model (config `models.live`) | Speed matters more than depth during a call |
 | Post meeting | Claude, stronger model (config `models.post`) | Quality of summary, action items, feedback |
-| Database | Supabase Postgres with row level security | Auth, Postgres, and scheduled jobs in one place |
-| Auth | Supabase Auth with passkeys, sign up disabled | Face ID login, single owner |
+| Database | Supabase Postgres, private `listener` schema, row level security | Managed Postgres. Supabase's REST API only publishes `public`, so nothing here is exposed through it |
+| Auth | Passkeys via SimpleWebAuthn, signed session cookie, sign up disabled | Face ID login, single owner. Supabase Auth passkeys were still experimental (May 2026) |
 | Encryption | Node `crypto`, AES-256-GCM, envelope keys | No extra vendor; per client keys allow crypto shredding |
 | Scheduled jobs | Vercel Cron calling a protected route | Daily purge |
 | Hosting | Vercel (app), Supabase (database) | Managed, low maintenance |
@@ -52,10 +52,11 @@ src/
     assist/            Prompts and calls for live assist, recall, post meeting
     config.ts          Loads and validates config.yaml (zod)
 supabase/
-  migrations/          SQL schema and RLS policies
+  migrations/          SQL schema and RLS policies (Supabase only hosts it)
+db/migrations/         Plain SQL migrations, applied with `npm run db:migrate` or the SQL editor
 tests/
   unit/                Vitest
-  e2e/                 Playwright
+  db/                  Vitest against a real Postgres (TEST_DATABASE_URL)
 config.yaml            All parameters (CLAUDE.md rule 6)
 ```
 
@@ -72,11 +73,20 @@ Encrypted columns end in `_enc` and hold `nonce || ciphertext || tag`, base64.
 | suggestion_cards | id, client_id, meeting_id, kind, body_enc, pinned, expires_at | With transcript unless pinned |
 | summaries | id, client_id, meeting_id, version, summary_enc, decisions_enc, quotes_enc, feedback_enc, tags, created_at | Until deleted |
 | action_items | id, client_id, project_id, meeting_id, title_enc, owner_enc, due_date, status, source_quote_enc, source_ms, created_at, closed_at | Until deleted |
+| passkeys | id, public_key, counter, transports, created_at, last_used_at | Until removed |
 | audit_log | id, at, event, client_id, object_id, count | 365 days (config) |
 
 Indexes on `(client_id, ...)` for every table and on `transcript_segments.expires_at`.
 
-Wrapped data keys are stored in `clients.wrapped_dek`. The master key that unwraps them is the `LISTENER_MASTER_KEY` environment variable on Vercel and never in the database, so a database dump alone is unreadable.
+Wrapped data keys are stored in `clients.wrapped_dek`. The master key that unwraps them is the `LISTENER_MASTER_KEY` environment variable on Vercel and never in the database, so a database dump alone is unreadable. Each ciphertext is bound to its client, column, and row, so it can't be copied into another row or client.
+
+Isolation is enforced three ways:
+
+1. The app connects as `listener_app`, which cannot bypass row level security or change the schema.
+2. Every transaction sets `app.client_id` (or the `directory` or `auth` scope), and policies only show rows for that scope.
+3. Composite foreign keys (`project_id, client_id`) make it impossible for a meeting or segment to reference another client's project or meeting.
+
+The daily purge is a `security definer` function that can only delete expired segments and old audit rows.
 
 ## 4. Known Risk: iOS Microphone in a Web App
 
@@ -109,8 +119,10 @@ Done when:
 
 ### Phase 2: Secure data foundation
 
-- Supabase project, migrations, RLS policies.
-- Passkey sign in, sign up disabled, idle session timeout.
+Status: built 2026-11-03. Awaiting deployment.
+
+- Postgres schema in `db/migrations`, RLS policies, restricted app role.
+- Passkey sign in, sign up disabled, idle session timeout. The access code only enrolls the first passkey.
 - `src/lib/crypto`: data key generation, wrap and unwrap, field encrypt and decrypt. Tests include tamper detection and wrong key rejection.
 - `src/lib/policy`: `assertClientScope`, `computeExpiresAt`, `redact`, `isPurgeable`. Tests for each.
 - Clients and projects CRUD.
@@ -145,8 +157,9 @@ Not started until SPEC section 8 is expanded into a full section.
 
 ## 6. Hosting Notes
 
-- Vercel project with environment variables: `DEEPGRAM_API_KEY`, `ANTHROPIC_API_KEY`, `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` (purge job only), `LISTENER_MASTER_KEY`, `CRON_SECRET`.
-- Supabase backups: record the plan's backup retention here once the project is created. Effective transcript life is the transcript retention plus this period. Client deletion destroys the wrapped data key, so backups of that client become unreadable.
+- Vercel project with environment variables: `DEEPGRAM_API_KEY`, `LISTENER_ACCESS_CODE`, `LISTENER_MASTER_KEY`, `DATABASE_URL` (as `listener_app`), `CRON_SECRET`, and optionally `LISTENER_ORIGIN`. No database service key is used anywhere.
+- Supabase backups: record the plan's backup retention here once the project is created. Effective transcript life is the transcript retention plus this period. Backups hold wrapped data keys, so a deleted client's data stays recoverable from a backup (with the master key) until that backup expires.
+- Database: Supabase project in the region nearest Vercel's functions (US East by default). Connect through the transaction pooler as `listener_app`. Apply `db/migrations` with the SQL editor or `npm run db:migrate`.
 - Confirm before production: Deepgram retention terms with `mip_opt_out=true` (opting out removes Deepgram's model improvement discount), Anthropic API data retention terms, and Supabase and Vercel data processing terms.
 
 ## 7. Cost Notes

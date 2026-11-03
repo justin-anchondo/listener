@@ -15,10 +15,19 @@ const configSchema = z.object({
     session_idle_minutes: z.number().int().positive(),
     signup_enabled: z.literal(false),
     cipher: z.literal("aes-256-gcm"),
+    session_max_hours: z.number().positive(),
+    session_refresh_seconds: z.number().int().positive(),
+    passkey_challenge_seconds: z.number().int().positive(),
   }),
   access_gate: z.object({
     min_code_length: z.number().int().min(8),
-    session_hours: z.number().positive(),
+  }),
+  storage: z.object({
+    segment_flush_seconds: z.number().positive(),
+    max_segments_per_post: z.number().int().positive(),
+    max_segment_chars: z.number().int().positive(),
+    max_name_chars: z.number().int().positive(),
+    max_brief_chars: z.number().int().positive(),
   }),
   capture: z.object({
     sample_rate_hz: z.number().int().positive(),
@@ -62,7 +71,10 @@ const configSchema = z.object({
 export type Config = z.infer<typeof configSchema>;
 
 /** Settings the browser capture screen needs. Contains no secrets. */
-export type CaptureSettings = Pick<Config, "capture" | "stt">;
+export type CaptureSettings = Pick<Config, "capture" | "stt"> & {
+  storage: Pick<Config["storage"], "segment_flush_seconds" | "max_segments_per_post">;
+  templates: string[];
+};
 
 export function parseConfig(text: string): Config {
   return configSchema.parse(parse(text));
@@ -78,5 +90,13 @@ export function loadConfig(): Config {
 }
 
 export function captureSettings(config: Config): CaptureSettings {
-  return { capture: config.capture, stt: config.stt };
+  return {
+    capture: config.capture,
+    stt: config.stt,
+    storage: {
+      segment_flush_seconds: config.storage.segment_flush_seconds,
+      max_segments_per_post: config.storage.max_segments_per_post,
+    },
+    templates: Object.keys(config.templates),
+  };
 }

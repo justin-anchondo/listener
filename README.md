@@ -9,24 +9,50 @@ A private meeting scribe that runs on an iPhone docked by your desk speaker. It 
 - **docs/REFERENCES.md**: similar projects and what was borrowed.
 - **docs/phase1-results.md**: test log for the iPhone capture spike.
 
-Status: Phase 1 (capture spike) built. Live transcription only; nothing is stored.
+Status: Phase 2 built. Face ID sign in, clients and projects, and encrypted transcript storage with 30 day expiry.
 
-## Deploy to Vercel (one time)
+## One time setup
 
-1. Sign in at vercel.com with GitHub and choose **Add New › Project**. Import `listener`.
-2. Under **Environment Variables**, add:
-   - `DEEPGRAM_API_KEY`: your Deepgram key. It needs permission to create temporary tokens (Member role or higher).
-   - `LISTENER_ACCESS_CODE`: a long passphrase you choose, at least 12 characters. A few random words works well.
-3. Deploy. Vercel gives you an `https://` address.
-4. To deploy this branch before it is merged, open the project's **Deployments** tab and use the preview deployment for `claude/intelligent-knuth-94w2ki`.
+### 1. Generate secrets
 
-## Use it on the iPhone
+Open the app's address once the new deployment is live. Until everything is configured it shows a setup screen listing what's missing, with freshly generated values for `LISTENER_MASTER_KEY`, `CRON_SECRET`, and the database password. They're made in your browser and never sent anywhere. **Save `LISTENER_MASTER_KEY` in your password manager.** If it's lost, stored data can't be decrypted.
 
-1. Open the Vercel address in Safari and enter the access code.
-2. Optional: Share › **Add to Home Screen** for an app icon. Phase 1 tests both ways.
-3. Set **Settings › Display & Brightness › Auto-Lock** to Never while docked, or keep the app open so it can hold the screen awake.
-4. Tap **Start** when the call begins. Allow the microphone when asked.
-5. Tap **Details** to see delay, reconnects, and mic level. Record results in `docs/phase1-results.md`.
+### 2. Create the database (Supabase)
+
+1. At supabase.com, create a project. Pick the **US East** region (closest to Vercel's default). Save the database password it gives you.
+2. Open **SQL Editor**, paste the whole of `db/migrations/0001_init.sql`, and run it.
+3. In a new query, run this with the generated database password:
+   ```sql
+   alter role listener_app password 'PASTE_GENERATED_PASSWORD';
+   ```
+4. Click **Connect**, choose **Transaction pooler**, and copy the connection string. It looks like `postgresql://postgres.abcdefgh:[YOUR-PASSWORD]@aws-0-us-east-1.pooler.supabase.com:6543/postgres`. Change `postgres.abcdefgh` to `listener_app.abcdefgh` (keep your project's code after the dot) and put the generated password in place of `[YOUR-PASSWORD]`. That's your `DATABASE_URL`.
+
+### 3. Add settings in Vercel
+
+Settings › Environment Variables, all environments checked:
+
+| Name | Value |
+| --- | --- |
+| `DATABASE_URL` | From step 2 |
+| `LISTENER_MASTER_KEY` | From step 1 |
+| `CRON_SECRET` | From step 1 |
+| `LISTENER_ACCESS_CODE` | Already set. Now only used once, to set up Face ID |
+| `DEEPGRAM_API_KEY` | Already set |
+| `LISTENER_ORIGIN` | Your stable address, e.g. `https://listener-yourname.vercel.app` |
+
+Then redeploy. Passkeys belong to one web address, so always use the stable one.
+
+### 4. First sign in
+
+Open the stable address on the iPhone, enter the access code once, and approve Face ID. After that it's Face ID only. The access code can't add another passkey once one exists.
+
+## Daily use
+
+1. Pick the client, project, and meeting type (the last choice is remembered). Use **+** to add one on the spot, or **Manage** to rename, archive, write a project brief, or delete a client.
+2. Tap **Start**. The bar under the status shows the client and project and whether lines are saving.
+3. Tap **Stop**. It saves the last lines, then shows **Saved**.
+
+Transcripts are kept 30 days after the meeting ends, then deleted by a daily job. Audio is never stored.
 
 ## Develop locally
 
@@ -46,4 +72,4 @@ npm run dev
 npm test
 ```
 
-Microphone access needs `https` or `localhost`, so test on the phone through the Vercel deployment.
+Database tests run when `TEST_DATABASE_URL` (as `listener_app`) and `TEST_DATABASE_ADMIN_URL` (owner) point at a Postgres with the migrations applied. Otherwise they're skipped.

@@ -1,10 +1,24 @@
+import { randomBytes } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { checkAccessCode, isGateConfigured, signSession, verifySession } from "@/lib/policy/access";
+import {
+  checkAccessCode,
+  isGateConfigured,
+  newChallenge,
+  shouldRefresh,
+  signChallenge,
+  signSession,
+  verifyChallenge,
+  verifySession,
+} from "@/lib/policy/access";
 
 const CODE = "correct horse battery staple";
-const HOUR = 3_600_000;
+const key = randomBytes(32);
+const MIN = 60_000;
+const HOUR = 60 * MIN;
+const limits = { maxAgeMs: 12 * HOUR, idleMs: 30 * MIN };
+const t0 = 1_800_000_000_000;
 
-describe("access gate", () => {
+describe("access code", () => {
   it("is closed when the code is missing or too short", () => {
     expect(isGateConfigured(undefined, 12)).toBe(false);
     expect(isGateConfigured("short", 12)).toBe(false);
@@ -16,31 +30,55 @@ describe("access gate", () => {
     expect(checkAccessCode(CODE + " ", CODE)).toBe(false);
     expect(checkAccessCode("", CODE)).toBe(false);
   });
+});
 
-  it("verifies a fresh session", () => {
-    const now = 1_800_000_000_000;
-    expect(verifySession(CODE, signSession(CODE, now), now + HOUR, 12 * HOUR)).toBe(true);
+describe("sessions", () => {
+  it("accepts a fresh session", () => {
+    const cookie = signSession(key, { issuedAtMs: t0, seenAtMs: t0 });
+    expect(verifySession(key, cookie, t0 + MIN, limits)).toEqual({ issuedAtMs: t0, seenAtMs: t0 });
   });
 
-  it("rejects expired, future dated, and missing sessions", () => {
-    const now = 1_800_000_000_000;
-    const cookie = signSession(CODE, now);
-    expect(verifySession(CODE, cookie, now + 13 * HOUR, 12 * HOUR)).toBe(false);
-    expect(verifySession(CODE, signSession(CODE, now + HOUR), now, 12 * HOUR)).toBe(false);
-    expect(verifySession(CODE, undefined, now, 12 * HOUR)).toBe(false);
+  it("expires after the idle window without activity", () => {
+    const cookie = signSession(key, { issuedAtMs: t0, seenAtMs: t0 });
+    expect(verifySession(key, cookie, t0 + 31 * MIN, limits)).toBeNull();
   });
 
-  it("rejects tampered sessions", () => {
-    const now = 1_800_000_000_000;
-    const [, sig] = signSession(CODE, now).split(".");
-    expect(verifySession(CODE, `${now + 1}.${sig}`, now + 2, 12 * HOUR)).toBe(false);
-    expect(verifySession(CODE, `${now}.${sig}x`, now, 12 * HOUR)).toBe(false);
-    expect(verifySession(CODE, `${now}.${sig}.extra`, now, 12 * HOUR)).toBe(false);
-    expect(verifySession(CODE, "garbage", now, 12 * HOUR)).toBe(false);
+  it("stays valid with activity but not past the absolute lifetime", () => {
+    const recent = signSession(key, { issuedAtMs: t0, seenAtMs: t0 + 11 * HOUR });
+    expect(verifySession(key, recent, t0 + 11 * HOUR + MIN, limits)).not.toBeNull();
+    const old = signSession(key, { issuedAtMs: t0, seenAtMs: t0 + 12 * HOUR });
+    expect(verifySession(key, old, t0 + 12 * HOUR + MIN, limits)).toBeNull();
   });
 
-  it("ends all sessions when the code changes", () => {
-    const now = 1_800_000_000_000;
-    expect(verifySession("a different long code", signSession(CODE, now), now, 12 * HOUR)).toBe(false);
+  it("rejects tampering, other keys, future times, and garbage", () => {
+    const cookie = signSession(key, { issuedAtMs: t0, seenAtMs: t0 });
+    const [, , , sig] = cookie.split(".");
+    expect(verifySession(key, `s1.${t0}.${t0 + 5 * MIN}.${sig}`, t0 + 6 * MIN, limits)).toBeNull();
+    expect(verifySession(randomBytes(32), cookie, t0, limits)).toBeNull();
+    expect(verifySession(key, signSession(key, { issuedAtMs: t0 + HOUR, seenAtMs: t0 + HOUR }), t0, limits)).toBeNull();
+    expect(verifySession(key, "garbage", t0, limits)).toBeNull();
+    expect(verifySession(key, undefined, t0, limits)).toBeNull();
+  });
+
+  it("refreshes only after the refresh interval", () => {
+    expect(shouldRefresh({ issuedAtMs: t0, seenAtMs: t0 }, t0 + 30_000, 60_000)).toBe(false);
+    expect(shouldRefresh({ issuedAtMs: t0, seenAtMs: t0 }, t0 + 60_000, 60_000)).toBe(true);
+  });
+});
+
+describe("passkey challenges", () => {
+  it("round trips for the right purpose before expiry", () => {
+    const c = newChallenge();
+    const cookie = signChallenge(key, "login", c, t0 + 5 * MIN);
+    expect(verifyChallenge(key, cookie, "login", t0)).toBe(c);
+  });
+
+  it("rejects the wrong purpose, expiry, and tampering", () => {
+    const c = newChallenge();
+    const cookie = signChallenge(key, "enroll", c, t0 + 5 * MIN);
+    expect(verifyChallenge(key, cookie, "login", t0)).toBeNull();
+    expect(verifyChallenge(key, cookie, "enroll", t0 + 6 * MIN)).toBeNull();
+    expect(verifyChallenge(key, cookie.replace(c, newChallenge()), "enroll", t0)).toBeNull();
+    expect(verifyChallenge(randomBytes(32), cookie, "enroll", t0)).toBeNull();
   });
 });
