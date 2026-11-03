@@ -25,6 +25,10 @@ export async function POST() {
   } catch (err) {
     const status = err instanceof TokenError ? err.status : 0;
     console.error("stt token grant failed", { status });
-    return NextResponse.json({ error: "upstream" }, { status: 502, headers: noStore });
+    // Deepgram's status code only (e.g. 401, 403), never its response body.
+    return NextResponse.json(
+      { error: "upstream", upstreamStatus: status || undefined },
+      { status: 502, headers: noStore },
+    );
   }
 }

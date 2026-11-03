@@ -8,6 +8,7 @@ import {
   type Diagnostics,
   type TranscriptEntry,
 } from "@/lib/capture/session";
+import { describeCaptureError } from "@/lib/capture/errors";
 
 const STATUS_LABEL: Record<CaptureStatus, string> = {
   idle: "Ready",
@@ -17,13 +18,6 @@ const STATUS_LABEL: Record<CaptureStatus, string> = {
   stalled: "Mic stopped",
   stopped: "Stopped",
   error: "Stopped with an error",
-};
-
-const ERROR_HELP: Record<string, string> = {
-  session: "Your session expired. Reload the page and enter the access code.",
-  reconnect: "Couldn't reconnect to transcription. Check the connection and tap Resume.",
-  NotAllowedError: "Microphone permission was denied. Allow it in Settings › Safari › Microphone.",
-  NotFoundError: "No microphone found.",
 };
 
 function clock(totalSec: number): string {
@@ -108,7 +102,7 @@ export default function Capture({ settings }: { settings: CaptureSettings }) {
       )}
       {status === "error" && (
         <div className="alert" role="alert">
-          {ERROR_HELP[detail ?? ""] ?? "Something went wrong."}
+          <span>{describeCaptureError(detail)}</span>
           {detail !== "session" && <button onClick={resume}>Resume</button>}
         </div>
       )}

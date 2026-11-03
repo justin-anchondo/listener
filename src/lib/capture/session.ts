@@ -6,6 +6,7 @@ import type { CaptureSettings } from "@/lib/config";
 import { Downsampler, rms } from "@/lib/audio/downsampler";
 import { buildListenUrl, listenProtocols } from "@/lib/stt/listen-url";
 import { parseResult } from "@/lib/stt/results";
+import { CaptureError, micErrorCode, tokenErrorCode } from "@/lib/capture/errors";
 import { isStalled, median, reconnectDelayMs, transcriptLagMs } from "@/lib/stt/timing";
 
 export type CaptureStatus = "idle" | "starting" | "live" | "reconnecting" | "stalled" | "stopped" | "error";
@@ -31,8 +32,6 @@ export type CaptureCallbacks = {
   onInterim(text: string | null): void;
   onDiagnostics(diag: Diagnostics): void;
 };
-
-export class SessionExpiredError extends Error {}
 
 const LAG_SAMPLES_KEPT = 200;
 
@@ -83,24 +82,34 @@ export class CaptureSession {
       await this.connect();
     } catch (err) {
       this.teardown();
-      this.setStatus("error", err instanceof SessionExpiredError ? "session" : errorName(err));
+      this.setStatus("error", err instanceof CaptureError ? err.code : "unknown");
       throw err;
     }
   }
 
   /** User tapped Resume after an interruption. Must run inside a user gesture on iOS. */
   async resume(): Promise<void> {
-    const track = this.stream?.getAudioTracks()[0];
-    if (!track || track.readyState === "ended") {
-      this.stopAudio();
-      await this.startAudio();
-    } else {
-      await this.ctx?.resume();
-    }
-    this.lastFrameAtMs = performance.now();
-    if (!this.ws || this.ws.readyState === WebSocket.CLOSED) {
-      this.reconnectAttempt = 0;
-      await this.connect();
+    this.stopping = false;
+    try {
+      const track = this.stream?.getAudioTracks()[0];
+      if (!track || track.readyState === "ended" || !this.ctx) {
+        this.stopAudio();
+        await this.startAudio();
+      } else {
+        await this.ctx.resume();
+      }
+      this.lastFrameAtMs = performance.now();
+      // Re-arm anything a failed start tore down.
+      if (!this.stallTimer) this.stallTimer = setInterval(this.checkStall, 1000);
+      document.addEventListener("visibilitychange", this.onVisibility);
+      if (this.wakeLockState !== "on") await this.acquireWakeLock();
+      if (!this.ws || this.ws.readyState === WebSocket.CLOSED || this.ws.readyState === WebSocket.CLOSING) {
+        this.reconnectAttempt = 0;
+        this.setStatus("starting");
+        await this.connect();
+      }
+    } catch (err) {
+      this.setStatus("error", err instanceof CaptureError ? err.code : "unknown");
     }
   }
 
@@ -134,27 +143,46 @@ export class CaptureSession {
 
   private async startAudio(): Promise<void> {
     const { capture } = this.settings;
-    this.stream = await navigator.mediaDevices.getUserMedia({
-      audio: {
-        channelCount: 1,
-        echoCancellation: capture.echo_cancellation,
-        noiseSuppression: capture.noise_suppression,
-        autoGainControl: capture.auto_gain_control,
-      },
-    });
-    const ctx = new AudioContext();
+    // iOS only lets audio start inside the tap that triggered it, so the
+    // context is created and resumed before the first await.
+    let ctx: AudioContext;
+    try {
+      ctx = new AudioContext();
+    } catch {
+      throw new CaptureError("audio_engine");
+    }
     this.ctx = ctx;
-    await ctx.audioWorklet.addModule("/pcm-worklet.js");
-    const source = ctx.createMediaStreamSource(this.stream);
-    const worklet = new AudioWorkletNode(ctx, "pcm-capture");
-    const mute = ctx.createGain();
-    mute.gain.value = 0; // keeps the graph pulling audio without playing it back
-    source.connect(worklet).connect(mute).connect(ctx.destination);
-    this.worklet = worklet;
-    this.downsampler = new Downsampler(ctx.sampleRate, capture.sample_rate_hz);
-    worklet.port.onmessage = (e: MessageEvent<Float32Array>) => this.onFrame(e.data);
-    ctx.onstatechange = () => this.emitDiagnostics();
-    await ctx.resume();
+    const resumed = ctx.resume();
+
+    try {
+      this.stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          channelCount: 1,
+          echoCancellation: capture.echo_cancellation,
+          noiseSuppression: capture.noise_suppression,
+          autoGainControl: capture.auto_gain_control,
+        },
+      });
+    } catch (err) {
+      throw new CaptureError(micErrorCode(err));
+    }
+
+    try {
+      await ctx.audioWorklet.addModule("/pcm-worklet.js");
+      const source = ctx.createMediaStreamSource(this.stream);
+      const worklet = new AudioWorkletNode(ctx, "pcm-capture");
+      const mute = ctx.createGain();
+      mute.gain.value = 0; // keeps the graph pulling audio without playing it back
+      source.connect(worklet).connect(mute).connect(ctx.destination);
+      this.worklet = worklet;
+      this.downsampler = new Downsampler(ctx.sampleRate, capture.sample_rate_hz);
+      worklet.port.onmessage = (e: MessageEvent<Float32Array>) => this.onFrame(e.data);
+      ctx.onstatechange = () => this.emitDiagnostics();
+      await resumed;
+      if (ctx.state !== "running") await ctx.resume();
+    } catch {
+      throw new CaptureError("audio_engine");
+    }
     this.lastFrameAtMs = performance.now();
     this.emitDiagnostics();
   }
@@ -218,9 +246,17 @@ export class CaptureSession {
   // ---- socket ----
 
   private async fetchToken(): Promise<string> {
-    const res = await fetch("/api/stt/token", { method: "POST", cache: "no-store" });
-    if (res.status === 401) throw new SessionExpiredError();
-    if (!res.ok) throw new Error(`token ${res.status}`);
+    let res: Response;
+    try {
+      res = await fetch("/api/stt/token", { method: "POST", cache: "no-store" });
+    } catch {
+      throw new CaptureError("network");
+    }
+    if (!res.ok) {
+      const body = (await res.json().catch(() => ({}))) as { upstreamStatus?: unknown };
+      const upstream = typeof body.upstreamStatus === "number" ? body.upstreamStatus : undefined;
+      throw new CaptureError(tokenErrorCode(res.status, upstream));
+    }
     const body = (await res.json()) as { accessToken: string };
     return body.accessToken;
   }
@@ -267,8 +303,8 @@ export class CaptureSession {
     this.setStatus("reconnecting");
     this.reconnectTimer = setTimeout(() => {
       this.connect().catch((err) => {
-        if (err instanceof SessionExpiredError) {
-          this.setStatus("error", "session");
+        if (err instanceof CaptureError && (err.code === "session" || err.code.startsWith("token_"))) {
+          this.setStatus("error", err.code);
           return;
         }
         this.scheduleReconnect();
@@ -359,9 +395,4 @@ export class CaptureSession {
       wakeLock: this.wakeLockState,
     });
   }
-}
-
-// Error names only; messages from the platform could echo request details.
-function errorName(err: unknown): string {
-  return err instanceof Error ? err.name : "unknown";
 }
