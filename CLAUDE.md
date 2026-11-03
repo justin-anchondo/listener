@@ -6,7 +6,7 @@ Project: Listener, a private meeting scribe that runs on my iPhone. SPEC.md is t
 
 1. Audio is never persisted. No audio bytes go to disk, the database, object storage, logs, or any service other than the configured transcription vendor.
 2. Transcript, summary, and action item text is never logged, never sent to analytics or error trackers, and never included in error messages. Log ids and counts only.
-3. Every read and write of client data is scoped by `client_id`. The only cross client view is the consolidated open items list, and it reads only action item fields.
+3. Every read and write of client data is scoped by `client_id`. The only cross client views are the client and project picker (names only) and the consolidated open items list (action item fields only).
 4. Every security, scoping, and retention rule lives in `src/lib/policy` as a pure function with unit tests. No prompt, route handler, or UI component may contain or bypass one.
 5. Sensitive text is encrypted at the application layer with the client's data key before it reaches the database (SPEC section 6).
 6. All limits, retention windows, model names, and parameters come from `config.yaml`. No hardcoded values elsewhere.
