@@ -9,6 +9,7 @@ import {
   type TranscriptEntry,
 } from "@/lib/capture/session";
 import { describeCaptureError } from "@/lib/capture/errors";
+import { mergeEntries } from "@/lib/capture/merge";
 
 const STATUS_LABEL: Record<CaptureStatus, string> = {
   idle: "Ready",
@@ -133,7 +134,7 @@ export default function Capture({ settings }: { settings: CaptureSettings }) {
         {entries.length === 0 && !interim && (
           <p className="empty">{active ? "Listening…" : "Tap Start when the call begins."}</p>
         )}
-        {entries.map((e) =>
+        {mergeEntries(entries, settings.capture.merge_gap_seconds).map((e) =>
           e.kind === "gap" ? (
             <p key={e.id} className="gap">
               {clock(e.atSec)} · {e.seconds}s not captured ({e.reason === "stall" ? "mic paused" : "connection lost"})

@@ -23,6 +23,7 @@ const configSchema = z.object({
   capture: z.object({
     sample_rate_hz: z.number().int().positive(),
     chunk_ms: z.number().int().positive(),
+    merge_gap_seconds: z.number().nonnegative(),
     echo_cancellation: z.boolean(),
     noise_suppression: z.boolean(),
     auto_gain_control: z.boolean(),

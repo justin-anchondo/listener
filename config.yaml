@@ -22,6 +22,7 @@ access_gate:                        # Phase 1 only; replaced by passkeys in Phas
 capture:                            # SPEC 3
   sample_rate_hz: 16000
   chunk_ms: 100                     # audio sent to the vendor in chunks of this length
+  merge_gap_seconds: 8              # same speaker lines closer than this are shown as one paragraph
   echo_cancellation: false          # browser mic processing; tune in Phase 1 testing
   noise_suppression: false
   auto_gain_control: true

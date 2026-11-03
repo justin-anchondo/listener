@@ -12,7 +12,7 @@ import { isStalled, median, reconnectDelayMs, transcriptLagMs } from "@/lib/stt/
 export type CaptureStatus = "idle" | "starting" | "live" | "reconnecting" | "stalled" | "stopped" | "error";
 
 export type TranscriptEntry =
-  | { kind: "segment"; id: number; speaker: number | null; text: string; atSec: number }
+  | { kind: "segment"; id: number; speaker: number | null; text: string; atSec: number; endSec: number }
   | { kind: "gap"; id: number; atSec: number; seconds: number; reason: "reconnect" | "stall" };
 
 export type Diagnostics = {
@@ -334,7 +334,7 @@ export class CaptureSession {
     }
     const offset = this.socketOffsetSec ?? 0;
     for (const seg of result.segments) {
-      this.cb.onEntry({ kind: "segment", id: this.nextId++, speaker: seg.speaker, text: seg.text, atSec: offset + seg.startSec });
+      this.cb.onEntry({ kind: "segment", id: this.nextId++, speaker: seg.speaker, text: seg.text, atSec: offset + seg.startSec, endSec: offset + seg.endSec });
     }
     this.cb.onInterim(null);
     this.emitDiagnostics();
