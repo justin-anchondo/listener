@@ -3,7 +3,7 @@
 import { Plus } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import { type ItemPatch, ItemRow, ItemSheet, type SheetItem } from "@/components/app/items";
+import { type ItemPatch, ItemRow, ItemSheet, type SheetItem, useUndoDelete } from "@/components/app/items";
 import { PageHeader } from "@/components/app/page-header";
 import { Drawer, DrawerContent } from "@/components/ui/drawer";
 import { SegmentedControl } from "@/components/ui/segmented-control";
@@ -104,6 +104,12 @@ export default function MeetingView({ clientId, meetingId, allowedTags }: { clie
     void load();
   }, [load]);
 
+  const undoDelete = useUndoDelete<Item>(async (item) => {
+    const res = await sendJson(`/api/clients/${clientId}/action-items/${item.id}`, "DELETE");
+    if (!res.ok && res.status !== 404) setError("Couldn't delete the action item.");
+    await load();
+  });
+
   async function generate() {
     setGenerating(true);
     setConfirmRegen(false);
@@ -135,7 +141,8 @@ export default function MeetingView({ clientId, meetingId, allowedTags }: { clie
   if (error && !data) return <main className="px-5 pt-safe"><p className="pt-10 text-destructive">{error}</p></main>;
   if (!data) return <main className="px-5 pt-safe"><p className="pt-10 text-muted-foreground">Loading…</p></main>;
 
-  const { meeting, summary, items } = data;
+  const { meeting, summary } = data;
+  const items = data.items.filter((i) => i.id !== undoDelete.hiddenId);
   const s = summary?.content;
   const minutes = minutesBetween(meeting.startedAt, meeting.endedAt);
   const label = (sp: number | null) => (sp === null ? "Speaker" : data.speakerMap[String(sp)] || `Speaker ${sp + 1}`);
@@ -278,9 +285,11 @@ export default function MeetingView({ clientId, meetingId, allowedTags }: { clie
                   onToggle={() => patchItem(item, { status: item.status === "done" ? "open" : "done" })}
                   onDue={(date) => patchItem(item, { dueDate: date })}
                   onOpen={() => setOpenItem(item)}
+                  onDelete={() => undoDelete.remove(item)}
                 />
               ))}
             </ul>
+            {items.length > 0 && <p className="mt-3 text-xs text-muted-foreground">Swipe left to delete · hold to edit</p>}
             <button type="button" onClick={addItem} className="mt-2 flex min-h-11 items-center gap-1.5 self-start text-[15px] font-semibold text-link">
               <Plus className="size-4" aria-hidden="true" /> Add action item
             </button>
@@ -348,6 +357,7 @@ export default function MeetingView({ clientId, meetingId, allowedTags }: { clie
         )}
       </main>
 
+      {undoDelete.toast}
       <ItemSheet
         item={sheetItem}
         onClose={() => setOpenItem(null)}

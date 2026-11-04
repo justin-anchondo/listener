@@ -1,6 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Trash2 } from "lucide-react";
+import { animate, motion, useMotionValue, useReducedMotion, useTransform } from "motion/react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Drawer, DrawerContent } from "@/components/ui/drawer";
 import { type DueTone, dueChip, localIsoDate } from "@/lib/format";
@@ -50,27 +52,163 @@ export type RowItem = {
   done: boolean;
 };
 
+const HOLD_MS = 450; // press and hold to edit
+const MOVE_CANCEL_PX = 8; // movement that turns a hold into a scroll or swipe
+const SWIPE_DELETE_PX = 110; // swipe left this far, or fling, to delete
+const FLING_PX_PER_S = 700;
+const UNDO_MS = 4000;
+
 export function ItemRow({
   item,
   onToggle,
   onDue,
   onOpen,
+  onDelete,
 }: {
   item: RowItem;
   onToggle: () => void;
   onDue: (date: string | null) => void;
   onOpen: () => void;
+  onDelete?: () => void;
 }) {
+  const reduced = useReducedMotion();
+  const x = useMotionValue(0);
+  const revealOpacity = useTransform(x, [-SWIPE_DELETE_PX, -24, 0], [1, 0.6, 0]);
+  const rowRef = useRef<HTMLLIElement>(null);
+  const hold = useRef<{ timer: number; x: number; y: number } | null>(null);
+  const [pressed, setPressed] = useState(false);
+
+  const cancelHold = useCallback(() => {
+    if (hold.current) window.clearTimeout(hold.current.timer);
+    hold.current = null;
+    setPressed(false);
+  }, []);
+  useEffect(() => cancelHold, [cancelHold]);
+
+  function startHold(e: React.PointerEvent) {
+    if ((e.target as HTMLElement).closest("input,[role=checkbox]")) return;
+    cancelHold();
+    setPressed(true);
+    hold.current = {
+      x: e.clientX,
+      y: e.clientY,
+      timer: window.setTimeout(() => {
+        hold.current = null;
+        setPressed(false);
+        navigator.vibrate?.(10);
+        onOpen();
+      }, HOLD_MS),
+    };
+  }
+
+  function moveHold(e: React.PointerEvent) {
+    const h = hold.current;
+    if (h && Math.hypot(e.clientX - h.x, e.clientY - h.y) > MOVE_CANCEL_PX) cancelHold();
+  }
+
   return (
-    <li className="flex items-center gap-3 border-b border-muted py-2.5 last:border-b-0">
-      <Checkbox checked={item.done} onCheckedChange={onToggle} aria-label={`Mark "${item.title}" ${item.done ? "open" : "done"}`} />
-      <button type="button" onClick={onOpen} className="flex min-h-11 min-w-0 flex-1 flex-col items-start justify-center gap-0.5 text-left">
-        <span className={cn("text-[15px] leading-snug", item.done && "text-muted-foreground line-through")}>{item.title}</span>
-        <span className="truncate text-[13px] text-muted-foreground">{item.sub}</span>
-      </button>
-      <DueChip dueDate={item.dueDate} done={item.done} onChange={onDue} label={item.title} />
+    <li ref={rowRef} className="relative overflow-hidden border-b border-muted last:border-b-0">
+      {onDelete && (
+        <motion.div
+          aria-hidden="true"
+          style={{ opacity: revealOpacity }}
+          className="absolute inset-0 flex items-center justify-end gap-1.5 bg-destructive pr-5 text-[15px] font-semibold text-white"
+        >
+          <Trash2 className="size-4" /> Delete
+        </motion.div>
+      )}
+      <motion.div
+        drag={onDelete ? "x" : false}
+        dragDirectionLock
+        dragConstraints={{ left: 0, right: 0 }}
+        dragElastic={{ left: 1, right: 0 }}
+        dragMomentum={false}
+        onDragStart={cancelHold}
+        onDragEnd={(_e, info) => {
+          if (!onDelete) return;
+          if (info.offset.x < -SWIPE_DELETE_PX || info.velocity.x < -FLING_PX_PER_S) {
+            const width = rowRef.current?.offsetWidth ?? 400;
+            if (reduced) onDelete();
+            else void animate(x, -width, { duration: 0.18, ease: "easeOut" }).then(onDelete);
+          }
+        }}
+        onPointerDown={startHold}
+        onPointerMove={moveHold}
+        onPointerUp={cancelHold}
+        onPointerCancel={cancelHold}
+        onPointerLeave={cancelHold}
+        onContextMenu={(e) => e.preventDefault()}
+        style={{ x, touchAction: "pan-y" }}
+        className={cn(
+          "relative flex select-none items-center gap-3 bg-background py-2.5 transition-colors [-webkit-touch-callout:none]",
+          pressed && "bg-muted",
+        )}
+      >
+        <Checkbox checked={item.done} onCheckedChange={onToggle} aria-label={`Mark "${item.title}" ${item.done ? "open" : "done"}`} />
+        <button
+          type="button"
+          // Touch: hold to edit. Keyboard and assistive tech (no pointer detail) open on activate.
+          onClick={(e) => e.detail === 0 && onOpen()}
+          aria-label={`Edit "${item.title}"`}
+          className="flex min-h-11 min-w-0 flex-1 flex-col items-start justify-center gap-0.5 text-left"
+        >
+          <span className={cn("text-[15px] leading-snug", item.done && "text-muted-foreground line-through")}>{item.title}</span>
+          <span className="truncate text-[13px] text-muted-foreground">{item.sub}</span>
+        </button>
+        <DueChip dueDate={item.dueDate} done={item.done} onChange={onDue} label={item.title} />
+      </motion.div>
     </li>
   );
+}
+
+/**
+ * Delete with a short undo window: the item disappears at once, the request
+ * is sent when the window closes, when another item is deleted, or when the
+ * page goes away.
+ */
+export function useUndoDelete<T extends { id: string; title: string }>(commit: (item: T) => Promise<void>) {
+  const [pending, setPending] = useState<T | null>(null);
+  const ref = useRef<{ item: T; timer: number } | null>(null);
+  const commitRef = useRef(commit);
+  commitRef.current = commit;
+
+  const flush = useCallback(() => {
+    const p = ref.current;
+    if (!p) return;
+    window.clearTimeout(p.timer);
+    ref.current = null;
+    setPending(null);
+    void commitRef.current(p.item);
+  }, []);
+
+  useEffect(() => {
+    window.addEventListener("pagehide", flush);
+    return () => {
+      window.removeEventListener("pagehide", flush);
+      flush();
+    };
+  }, [flush]);
+
+  const remove = useCallback((item: T) => {
+    flush();
+    ref.current = { item, timer: window.setTimeout(flush, UNDO_MS) };
+    setPending(item);
+  }, [flush]);
+
+  const undo = useCallback(() => {
+    if (ref.current) window.clearTimeout(ref.current.timer);
+    ref.current = null;
+    setPending(null);
+  }, []);
+
+  const toast = pending ? (
+    <div role="status" className="fixed inset-x-4 bottom-[calc(env(safe-area-inset-bottom)+76px)] z-40 mx-auto flex max-w-md items-center gap-3 rounded-xl bg-foreground px-4 py-3 text-background shadow-lg">
+      <span className="min-w-0 flex-1 truncate text-[14px]">Deleted “{pending.title}”</span>
+      <button type="button" onClick={undo} className="min-h-9 shrink-0 px-2 text-[14px] font-semibold text-background underline underline-offset-2">Undo</button>
+    </div>
+  ) : null;
+
+  return { hiddenId: pending?.id ?? null, remove, toast };
 }
 
 export type SheetItem = {

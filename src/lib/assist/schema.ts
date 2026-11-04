@@ -86,6 +86,25 @@ export function normalizeText(text: string): string {
   return text.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 }
 
+const STOP = new Set(["the", "a", "an", "to", "for", "of", "and", "on", "with", "by", "about", "me", "my", "our"]);
+const taskWords = (t: string) => new Set(normalizeText(t).split(" ").filter((w) => w && !STOP.has(w)));
+
+/**
+ * Two action items are the same task when their titles match after
+ * normalizing, or when they share an owner (or one has none) and nearly all
+ * of their meaningful words.
+ */
+export function sameTask(a: { title: string; owner: string | null }, b: { title: string; owner: string | null }): boolean {
+  if (normalizeText(a.title) === normalizeText(b.title)) return true;
+  if (a.owner && b.owner && a.owner !== b.owner && a.owner !== "Them" && b.owner !== "Them") return false;
+  const wa = taskWords(a.title);
+  const wb = taskWords(b.title);
+  if (wa.size === 0 || wb.size === 0) return false;
+  let shared = 0;
+  for (const w of wa) if (wb.has(w)) shared++;
+  return shared / (wa.size + wb.size - shared) >= 0.75;
+}
+
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 /** True for a real calendar date in YYYY-MM-DD form. */
@@ -154,6 +173,17 @@ export function cleanOutput(
       };
     })
     .filter((a) => a.title !== "")
+    .reduce<CleanActionItem[]>((kept, a) => {
+      // The same task often comes back twice (once as "me", once by the owner's
+      // name, or reworded). Keep the first, filling in a missing date or owner.
+      const twin = kept.find((k) => sameTask(k, a));
+      if (!twin) kept.push(a);
+      else {
+        twin.dueDate ??= a.dueDate;
+        if (!twin.owner || twin.owner === "Them") twin.owner = a.owner ?? twin.owner;
+      }
+      return kept;
+    }, [])
     .slice(0, l.maxListItems);
 
   const known = new Set((l.knownBriefTexts ?? []).map(normalizeText));

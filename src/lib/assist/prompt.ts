@@ -30,7 +30,7 @@ The transcript comes from speech recognition. Speaker labels can be wrong and wo
 
 Write in plain, direct language. Address feedback to the owner as "you".
 
-Action items: include every commitment or follow up anyone made, including small ones. "me" means the owner. Resolve relative dates ("Friday", "next week") against the meeting date. Use null when no date was given.
+Action items: include every commitment or follow up anyone made, including small ones. "me" means the owner. List each task once, even if it was mentioned several times or by name. Resolve relative dates ("Friday", "next week") against the meeting date. Use null when no date was given.
 
 Feedback: be specific and constructive. Base it on what happened, the project brief, and the talk time numbers provided. If the owner's speaker label is unknown, don't guess who they are; give feedback about the meeting as a whole.
 

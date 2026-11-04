@@ -2,7 +2,7 @@
 
 import { isMine } from "@/lib/owner";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { type ItemPatch, ItemRow, ItemSheet, type SheetItem } from "@/components/app/items";
+import { type ItemPatch, ItemRow, ItemSheet, type SheetItem, useUndoDelete } from "@/components/app/items";
 import { PageHeader } from "@/components/app/page-header";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { sendJson } from "@/lib/client/directory";
@@ -78,6 +78,16 @@ export default function OpenItems({ ownerNames }: { ownerNames: string[] }) {
     }
   }
 
+  const undoDelete = useUndoDelete<OpenItem>(async (item) => {
+    const res = await sendJson(`/api/clients/${item.clientId}/action-items/${item.id}`, "DELETE");
+    if (!res.ok && res.status !== 404) {
+      setError("Couldn't delete that item.");
+      await load();
+      return;
+    }
+    setItems((list) => list && list.filter((i) => i.id !== item.id));
+  });
+
   async function toggle(item: OpenItem) {
     const nowDone = !done.has(item.id);
     setDone((s) => {
@@ -90,7 +100,7 @@ export default function OpenItems({ ownerNames }: { ownerNames: string[] }) {
   }
 
   const today = localIsoDate();
-  const shown = useMemo(() => (items ?? []).filter((i) => !mineOnly || isMine(i.owner, ownerNames)), [items, mineOnly, ownerNames]);
+  const shown = useMemo(() => (items ?? []).filter((i) => i.id !== undoDelete.hiddenId && (!mineOnly || isMine(i.owner, ownerNames))), [items, mineOnly, ownerNames, undoDelete.hiddenId]);
   const openOnes = shown.filter((i) => !done.has(i.id));
   const counts = dueSummary(openOnes, today);
 
@@ -185,13 +195,16 @@ export default function OpenItems({ ownerNames }: { ownerNames: string[] }) {
                   onToggle={() => toggle(i)}
                   onDue={(date) => patch(i, { dueDate: date })}
                   onOpen={() => setOpen(i)}
+                  onDelete={() => undoDelete.remove(i)}
                 />
               ))}
             </ul>
           </section>
         ))}
+        {shown.length > 0 && <p className="text-xs text-muted-foreground">Swipe left to delete · hold to edit</p>}
       </main>
 
+      {undoDelete.toast}
       <ItemSheet
         item={sheetItem}
         allowSnooze
