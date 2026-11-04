@@ -249,17 +249,21 @@ export default function Capture({ settings }: { settings: CaptureSettings }) {
   if (busy) {
     return (
       <div className="flex min-h-dvh flex-col">
-        <PageHeader
-          meta={selection ? `${selection.clientName} · ${selection.projectName}${typeName ? ` · ${typeName}` : ""}` : undefined}
-          actions={selection && (
-            <>
-              <LiveToggle enabled={liveOn} status={live.status} onChange={setLiveOn} />
-              <button type="button" onClick={() => setAskOpen(true)} aria-label={`Ask about ${selection.clientName}`} className="grid size-10 place-items-center rounded-full text-muted-foreground hover:bg-muted">
-                <MessageCircleQuestion className="size-5" aria-hidden="true" />
-              </button>
-            </>
-          )}
-        />
+        {/* Pinned while recording so Tips and Ask stay reachable as the transcript scrolls. */}
+        <div className="sticky top-0 z-30 bg-background/95 backdrop-blur">
+          <PageHeader
+            meta={selection ? `${selection.clientName} · ${selection.projectName}${typeName ? ` · ${typeName}` : ""}` : undefined}
+            actions={selection && (
+              <>
+                <LiveToggle enabled={liveOn} status={live.status} onChange={setLiveOn} />
+                <button type="button" onClick={() => setAskOpen(true)} aria-label={`Ask about ${selection.clientName}`} className="grid size-10 place-items-center rounded-full text-muted-foreground hover:bg-muted">
+                  <MessageCircleQuestion className="size-5" aria-hidden="true" />
+                </button>
+              </>
+            )}
+          />
+          {liveOn && <LiveCards cards={live.cards} onPin={live.pin} onDismiss={live.dismiss} />}
+        </div>
 
         <div className="flex flex-col gap-2 px-5 pt-2">
           {status === "stalled" && (
@@ -295,8 +299,6 @@ export default function Capture({ settings }: { settings: CaptureSettings }) {
             </dl>
           )}
         </div>
-
-        {liveOn && <LiveCards cards={live.cards} onPin={live.pin} onDismiss={live.dismiss} />}
 
         <main aria-live="polite" className="flex flex-1 flex-col justify-end gap-4 px-5 pt-4 pb-40">
           {entries.length === 0 && !interim && (

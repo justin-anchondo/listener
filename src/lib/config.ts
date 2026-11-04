@@ -31,6 +31,7 @@ const configSchema = z.object({
     max_logo_bytes: z.number().int().positive(),
     logo_pixels: z.number().int().positive(),
     recent_meetings: z.number().int().positive(),
+    merge_window_hours: z.number().positive(),
   }),
   capture: z.object({
     sample_rate_hz: z.number().int().positive(),

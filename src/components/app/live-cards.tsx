@@ -34,7 +34,7 @@ export function LiveCards({ cards, onPin, onDismiss }: { cards: LiveCard[]; onPi
   const go = (d: number) => setIndex((i) => Math.min(cards.length - 1, Math.max(0, i + d)));
 
   return (
-    <section aria-label="Live tips" aria-live="polite" className="sticky top-0 z-20 bg-background/95 px-5 pb-2 pt-2 backdrop-blur">
+    <section aria-label="Live tips" aria-live="polite" className="px-5 pb-2 pt-2">
       <AnimatePresence mode="wait" initial={false}>
         <motion.div
           key={card.id}

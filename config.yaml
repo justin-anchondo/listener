@@ -30,6 +30,7 @@ storage:                            # SPEC 3.3
   max_logo_bytes: 150000            # client logo after the phone shrinks it
   logo_pixels: 160                  # logos are resized to fit this square before upload
   recent_meetings: 60               # rows on the Meetings tab
+  merge_window_hours: 4             # meetings this close (one's end to the other's start) can be merged
 
 capture:                            # SPEC 3
   sample_rate_hz: 16000

@@ -641,3 +641,96 @@ describe.skipIf(!run)("live assistant and recall", () => {
     expect((row.expires_at as Date).toISOString()).toBe("2026-01-31T00:00:00.000Z");
   });
 });
+
+describe.skipIf(!run)("merging meetings", () => {
+  let app: postgres.Sql;
+  let admin: postgres.Sql;
+  const seg = (seq: number, speaker: number, text: string) => ({ seq, speaker, startMs: seq * 5000, endMs: seq * 5000 + 4000, text });
+  const HOUR = 3_600_000;
+  const opts = { windowMs: 4 * HOUR, transcriptDays: 30, suggestionDays: 30 };
+
+  beforeAll(() => {
+    process.env.LISTENER_MASTER_KEY = randomBytes(32).toString("base64");
+    app = postgres(appUrl!, { prepare: false, max: 2 });
+    admin = postgres(adminUrl!, { max: 1, onnotice: () => undefined, connection: { search_path: "listener" } });
+    setDbForTests(app);
+  });
+
+  afterAll(async () => {
+    setDbForTests(undefined);
+    await app.end();
+    await admin.end();
+  });
+
+  beforeEach(async () => {
+    await admin`truncate clients, projects, meetings, transcript_segments, passkeys, audit_log, summaries, action_items, brief_amendments, meeting_types, suggestions cascade`;
+  });
+
+  async function recording(c: string, p: string, start: string, end: string, lines: string[]) {
+    const m = await startMeeting(c, p, "general");
+    await admin`update meetings set started_at = ${new Date(start)} where id = ${m}`;
+    await saveSegments(c, m, lines.map((t, i) => seg(i, i % 2, t)), 30);
+    await endMeeting(c, m, 30, new Date(end), 30);
+    return m;
+  }
+
+  it("joins the later recording onto the earlier one and moves its items, notes, and cards", async () => {
+    const { addActionItem, latestSummary, listMeetingItems } = await import("@/lib/db/summaries");
+    const { listAmendments } = await import("@/lib/db/amendments");
+    const { saveSuggestions, listSuggestions, updateSuggestion } = await import("@/lib/db/live");
+    const { listMergeCandidates, mergeMeetings } = await import("@/lib/db/merge");
+    const { saveGeneratedSummary } = await import("@/lib/db/summaries");
+    const c = await createClient("Acme");
+    const p = await createProject(c, "Website");
+    const a = await recording(c, p, "2026-11-04T09:00:00Z", "2026-11-04T09:20:00Z", ["Hello", "Hi"]);
+    const b = await recording(c, p, "2026-11-04T09:22:00Z", "2026-11-04T09:50:00Z", ["Sorry, I dropped", "No problem"]);
+    await recording(c, p, "2026-11-04T18:00:00Z", "2026-11-04T18:30:00Z", ["Much later call"]);
+    await addActionItem(c, b, { title: "Send deck", owner: "Me", dueDate: null, sourceQuote: null, sourceMs: 5000 });
+    await saveGeneratedSummary(c, b, "fake", {
+      title: "Second half", purpose: "", summary: "", main_points: [], decisions: [], key_quotes: [],
+      feedback: { went_well: [], suggestions: [], not_covered: [], commitments_by_me: [], open_questions: [] }, free_tags: [], participants: [],
+    }, [], [], ["Budget moved to Q1."]);
+    const [card] = await saveSuggestions(c, b, [{ kind: "reminder", text: "Mention the Q1 move.", sourceMs: 0 }], 30);
+    await updateSuggestion(c, card.id, { pinned: true }, 30);
+
+    const candidates = await listMergeCandidates(c, b, opts.windowMs);
+    expect(candidates.map((m) => m.id)).toEqual([a]);
+
+    // Merging from the later meeting's page still keeps the earlier meeting.
+    expect(await mergeMeetings(c, b, a, opts)).toEqual({ keep: a, drop: b, segments: 2 });
+    const { loadTranscript } = await import("@/lib/db/meetings");
+    const t = await loadTranscript(c, a);
+    expect(t.map((s) => [s.seq, s.startMs, s.text])).toEqual([
+      [0, 0, "Hello"], [1, 5000, "Hi"], [2, 22 * 60_000, "Sorry, I dropped"], [3, 22 * 60_000 + 5000, "No problem"],
+    ]);
+    expect((await listMeetingItems(c, a)).map((i) => [i.title, i.sourceMs])).toEqual([["Send deck", 22 * 60_000 + 5000]]);
+    expect((await listAmendments(c, p)).map((x) => [x.text, x.meetingId])).toEqual([["Budget moved to Q1.", a]]);
+    expect((await listSuggestions(c, a)).map((s) => [s.text, s.pinned, s.sourceMs])).toEqual([["Mention the Q1 move.", true, 22 * 60_000]]);
+    expect(await latestSummary(c, a)).toBeNull();
+    expect(await admin`select id from meetings where id = ${b}`).toHaveLength(0);
+    expect(await admin`select id from summaries where meeting_id = ${b}`).toHaveLength(0);
+    const [m] = await admin`select ended_at from meetings where id = ${a}`;
+    expect((m.ended_at as Date).toISOString()).toBe("2026-11-04T09:50:00.000Z");
+    const exp = await admin`select distinct expires_at from transcript_segments where meeting_id = ${a}`;
+    expect(exp.map((r) => (r.expires_at as Date).toISOString())).toEqual(["2026-12-04T09:50:00.000Z"]);
+  });
+
+  it("refuses meetings too far apart or without a transcript, and never crosses clients", async () => {
+    const { mergeMeetings } = await import("@/lib/db/merge");
+    const c = await createClient("Acme");
+    const p = await createProject(c, "Website");
+    const a = await recording(c, p, "2026-11-04T09:00:00Z", "2026-11-04T09:20:00Z", ["Hello"]);
+    const late = await recording(c, p, "2026-11-04T18:00:00Z", "2026-11-04T18:30:00Z", ["Later"]);
+    await expect(mergeMeetings(c, a, late, opts)).rejects.toThrow(/too_far_apart/);
+    const empty = await startMeeting(c, p, "general");
+    await endMeeting(c, empty, 30, new Date("2026-11-04T09:25:00Z"), 30);
+    await expect(mergeMeetings(c, a, empty, opts)).rejects.toThrow(/no_transcript/);
+
+    const other = await createClient("Beta");
+    const op = await createProject(other, "Pilot");
+    const theirs = await recording(other, op, "2026-11-04T09:21:00Z", "2026-11-04T09:40:00Z", ["Beta secret"]);
+    await expect(mergeMeetings(c, a, theirs, opts)).rejects.toThrow(/not found/);
+    await expect(mergeMeetings(other, a, theirs, opts)).rejects.toThrow(/not found/);
+    expect(await admin`select id from transcript_segments where meeting_id = ${theirs}`).toHaveLength(1);
+  });
+});

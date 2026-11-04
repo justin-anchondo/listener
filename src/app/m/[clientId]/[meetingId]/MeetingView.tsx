@@ -1,9 +1,10 @@
 "use client";
 
-import { Plus } from "lucide-react";
+import { Merge, Plus } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { type ItemPatch, ItemRow, ItemSheet, type SheetItem, useUndoDelete } from "@/components/app/items";
+import { MergeSheet } from "@/components/app/merge-sheet";
 import { PageHeader } from "@/components/app/page-header";
 import { Drawer, DrawerContent } from "@/components/ui/drawer";
 import { SegmentedControl } from "@/components/ui/segmented-control";
@@ -89,6 +90,7 @@ export default function MeetingView({ clientId, meetingId, allowedTags }: { clie
   const [error, setError] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
   const [tab, setTab] = useState<Tab>("summary");
+  const [merging, setMerging] = useState(false);
   const [pinned, setPinned] = useState<{ id: string; kind: string; text: string }[]>([]);
 
   useEffect(() => {
@@ -172,6 +174,21 @@ export default function MeetingView({ clientId, meetingId, allowedTags }: { clie
         back={{ href: `/p/${clientId}/${meeting.projectId}`, label: meeting.projectName }}
         title={s?.title ?? "Meeting"}
         meta={`${meeting.clientName} · ${fmtDateTime(meeting.startedAt)}${minutes ? ` · ${minutes} min` : ""}`}
+        actions={meeting.endedAt && (
+          <button type="button" onClick={() => setMerging(true)} aria-label="Merge with another recording" className="grid size-10 place-items-center rounded-full text-muted-foreground hover:bg-muted">
+            <Merge className="size-5" aria-hidden="true" />
+          </button>
+        )}
+      />
+      <MergeSheet
+        open={merging}
+        onClose={() => setMerging(false)}
+        clientId={clientId}
+        meetingId={meetingId}
+        onMerged={(kept) => {
+          setMerging(false);
+          window.location.assign(`/m/${clientId}/${kept}`);
+        }}
       />
 
       <div className="px-5 pt-4">
