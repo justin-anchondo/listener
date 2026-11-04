@@ -35,7 +35,7 @@ describe.skipIf(!run)("database isolation", () => {
   });
 
   beforeEach(async () => {
-    await admin`truncate clients, projects, meetings, transcript_segments, passkeys, audit_log, summaries, action_items, brief_amendments cascade`;
+    await admin`truncate clients, projects, meetings, transcript_segments, passkeys, audit_log, summaries, action_items, brief_amendments, meeting_types cascade`;
   });
 
   it("round trips a client, project, meeting, and transcript", async () => {
@@ -45,7 +45,7 @@ describe.skipIf(!run)("database isolation", () => {
     expect(await saveSegments(c, m, [seg(0, "Hello"), seg(1, "Pricing is 40k")], 30)).toBe(2);
     expect((await loadTranscript(c, m)).map((s) => s.text)).toEqual(["Hello", "Pricing is 40k"]);
     expect(await listDirectory()).toEqual([
-      { id: c, name: "Acme", projects: [{ id: p, name: "Website", status: "active" }] },
+      { id: c, name: "Acme", logoVersion: null, projects: [{ id: p, name: "Website", status: "active" }] },
     ]);
   });
 
@@ -222,6 +222,7 @@ describe.skipIf(!run)("summaries and action items", () => {
 
   const fakeOutput = {
     title: "Kickoff call",
+    participants: ["Dana"],
     purpose: "Plan launch",
     summary: "Agreed scope and budget.",
     main_points: ["Scope agreed"],
@@ -251,7 +252,7 @@ describe.skipIf(!run)("summaries and action items", () => {
   });
 
   beforeEach(async () => {
-    await admin`truncate clients, projects, meetings, transcript_segments, passkeys, audit_log, summaries, action_items, brief_amendments cascade`;
+    await admin`truncate clients, projects, meetings, transcript_segments, passkeys, audit_log, summaries, action_items, brief_amendments, meeting_types cascade`;
   });
 
   async function meetingWithTranscript(name: string) {
@@ -440,6 +441,74 @@ describe.skipIf(!run)("summaries and action items", () => {
     expect(await listAmendments(a.c, b.p)).toEqual([]);
     const [amend] = await listAmendments(b.c, b.p);
     await expect(setAmendmentDismissed(a.c, amend.id, true)).rejects.toThrow(/not found/);
+  });
+
+  it("lists recent meetings across clients with titles and participants, and that scope reads nothing else", async () => {
+    const a = await meetingWithTranscript("Acme");
+    const b = await meetingWithTranscript("Beta");
+    await summarize(a.c, a.m);
+    const { setSpeakerMap } = await import("@/lib/db/summaries");
+    await setSpeakerMap(b.c, b.m, { "0": "Me", "1": "Priya" });
+    const { listRecentMeetings } = await import("@/lib/db/recent");
+    const all = await listRecentMeetings(10);
+    expect(all.map((m) => [m.clientName, m.title, m.participants, m.openItems]).sort()).toEqual([
+      ["Acme", "Kickoff call", ["Dana"], 2],
+      ["Beta", null, ["Priya"], 0],
+    ]);
+    expect((await listRecentMeetings(10, b.c)).map((m) => m.clientName)).toEqual(["Beta"]);
+    expect(await listRecentMeetings(10, a.c, b.p)).toEqual([]);
+    const leaked = await app.begin(async (tx) => {
+      await tx`select set_config('search_path', 'listener', true), set_config('app.scope', 'recent', true)`;
+      return {
+        segments: await tx`select * from transcript_segments`,
+        items: await tx`select * from action_items`,
+        amendments: await tx`select * from brief_amendments`,
+        projects: await tx`select * from projects`,
+        clients: await tx`select * from clients`,
+      };
+    });
+    expect(leaked).toEqual({ segments: [], items: [], amendments: [], projects: [], clients: [] });
+    // The recent scope has select policies only, so writes touch nothing.
+    const updated = await app.begin(async (tx) => {
+      await tx`select set_config('search_path', 'listener', true), set_config('app.scope', 'recent', true)`;
+      return tx`update meetings set template = 'x' returning id`;
+    });
+    expect(updated).toEqual([]);
+  });
+
+  it("stores logos encrypted and only for their own client", async () => {
+    const a = await meetingWithTranscript("Acme");
+    const b = await meetingWithTranscript("Beta");
+    const { setClientLogo, getClientLogo } = await import("@/lib/db/directory");
+    const png = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.from("acme-logo-bytes")]);
+    await setClientLogo(a.c, { mime: "image/png", base64: png.toString("base64") });
+    expect((await getClientLogo(a.c))?.bytes).toEqual(png);
+    expect(await getClientLogo(b.c)).toBeNull();
+    const dir = await listDirectory();
+    expect(dir.find((c) => c.id === a.c)?.logoVersion).toBeTypeOf("number");
+    expect(dir.find((c) => c.id === b.c)?.logoVersion).toBeNull();
+    const [row] = await admin`select logo_enc from clients where id = ${a.c}`;
+    expect(row.logo_enc).toMatch(/^v1:/);
+    expect(Buffer.from(row.logo_enc.slice(3), "base64").toString("latin1")).not.toContain("acme-logo-bytes");
+    await setClientLogo(a.c, null);
+    expect(await getClientLogo(a.c)).toBeNull();
+  });
+
+  it("seeds meeting types from config, keeps keys on rename, and archives", async () => {
+    const { listMeetingTypes, createMeetingType, updateMeetingType, getMeetingType } = await import("@/lib/db/meetingTypes");
+    const defaults = { general: { watch_for: ["dates"] }, status_update: { watch_for: ["blockers"] } };
+    const seeded = await listMeetingTypes(defaults);
+    expect(seeded.map((t) => [t.key, t.name])).toEqual([["general", "General"], ["status_update", "Status update"]]);
+    expect(await listMeetingTypes({ other: { watch_for: [] } })).toHaveLength(2); // seeds only once
+    const t = await createMeetingType("Status Update", ["risks"]);
+    expect(t.key).toBe("status_update_2");
+    await updateMeetingType(seeded[0].id, { name: "Check-in", watchFor: ["dates", "owners"] });
+    expect(await getMeetingType("general")).toMatchObject({ name: "Check-in", watchFor: ["dates", "owners"] });
+    await updateMeetingType(t.id, { archived: true });
+    expect((await listMeetingTypes(defaults)).map((x) => x.key)).toEqual(["general", "status_update"]);
+    expect((await listMeetingTypes(defaults, true)).map((x) => x.key)).toContain("status_update_2");
+    const c = await createClient("Scope check");
+    await expect(withClient(c, (tx) => tx`select * from meeting_types`)).resolves.toEqual([]);
   });
 
   it("refuses to summarize an empty meeting", async () => {

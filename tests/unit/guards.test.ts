@@ -41,9 +41,9 @@ describe("source guards", () => {
   });
 
   it("never sends open items, or anything cross client, to the model", () => {
-    const viewFiles = sources.filter((f) => /openItems|open-items|api\/directory|MeetingPicker|manage\//i.test(f.rel));
+    const viewFiles = sources.filter((f) => /openItems|open-items|api\/directory|db\/recent|meetings\/recent|manage\//i.test(f.rel));
     expect(viewFiles.length).toBeGreaterThan(0);
-    for (const f of viewFiles) expect(`${f.rel}`).not.toSatisfy(() => /@\/lib\/assist|@anthropic-ai\/sdk/.test(f.text));
+    for (const f of viewFiles) expect(`${f.rel}`).not.toSatisfy(() => /@\/lib\/assist|@anthropic-ai\/sdk/.test(f.text.replace(/^import type .*$/gm, "")));
   });
 
   it("calls the model provider from one module only", () => {

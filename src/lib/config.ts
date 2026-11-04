@@ -28,6 +28,9 @@ const configSchema = z.object({
     max_segment_chars: z.number().int().positive(),
     max_name_chars: z.number().int().positive(),
     max_brief_chars: z.number().int().positive(),
+    max_logo_bytes: z.number().int().positive(),
+    logo_pixels: z.number().int().positive(),
+    recent_meetings: z.number().int().positive(),
   }),
   capture: z.object({
     sample_rate_hz: z.number().int().positive(),
@@ -81,7 +84,7 @@ export type Config = z.infer<typeof configSchema>;
 /** Settings the browser capture screen needs. Contains no secrets. */
 export type CaptureSettings = Pick<Config, "capture" | "stt"> & {
   storage: Pick<Config["storage"], "segment_flush_seconds" | "max_segments_per_post">;
-  templates: string[];
+  templates: { key: string; name: string }[];
 };
 
 export function parseConfig(text: string): Config {
@@ -105,6 +108,6 @@ export function captureSettings(config: Config): CaptureSettings {
       segment_flush_seconds: config.storage.segment_flush_seconds,
       max_segments_per_post: config.storage.max_segments_per_post,
     },
-    templates: Object.keys(config.templates),
+    templates: Object.keys(config.templates).map((key) => ({ key, name: key })),
   };
 }

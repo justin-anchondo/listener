@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 
 const TABS = [
   { href: "/", label: "Record", icon: CircleDot, match: (p: string) => p === "/" },
-  { href: "/meetings", label: "Meetings", icon: NotebookText, match: (p: string) => /^\/(meetings|p|m|manage)(\/|$)/.test(p) },
+  { href: "/meetings", label: "Meetings", icon: NotebookText, match: (p: string) => /^\/(meetings|c|p|m|manage)(\/|$)/.test(p) },
   { href: "/items", label: "Open items", icon: ListChecks, match: (p: string) => p.startsWith("/items") },
 ];
 

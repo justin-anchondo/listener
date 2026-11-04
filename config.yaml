@@ -27,6 +27,9 @@ storage:                            # SPEC 3.3
   max_segment_chars: 5000
   max_name_chars: 120               # client and project names
   max_brief_chars: 8000
+  max_logo_bytes: 150000            # client logo after the phone shrinks it
+  logo_pixels: 160                  # logos are resized to fit this square before upload
+  recent_meetings: 60               # rows on the Meetings tab
 
 capture:                            # SPEC 3
   sample_rate_hz: 16000
@@ -84,7 +87,7 @@ tags:                               # SPEC 4.3 controlled list
   - legal
   - follow_up
 
-templates:                          # SPEC 2
+templates:                          # SPEC 2: starting meeting types, editable in the app after first use
   general:
     watch_for: [questions_to_me, commitments, dates]
   discovery:

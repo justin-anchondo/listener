@@ -1,7 +1,9 @@
 "use client";
 
-import { Check, ChevronRight, Plus } from "lucide-react";
-import { useEffect, useState } from "react";
+import { Check, ChevronRight, Pencil, Plus } from "lucide-react";
+import Link from "next/link";
+import { useCallback, useEffect, useState } from "react";
+import { ClientAvatar } from "@/components/app/client-avatar";
 import { Drawer, DrawerContent } from "@/components/ui/drawer";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { type Client, loadDirectory, sendJson } from "@/lib/client/directory";
@@ -10,10 +12,13 @@ import { cn } from "@/lib/utils";
 export type Selection = {
   clientId: string;
   clientName: string;
+  logoVersion: number | null;
   projectId: string;
   projectName: string;
   template: string;
 };
+
+export type TypeOption = { key: string; name: string };
 
 const LAST_KEY = "listener.lastSelection"; // ids only, per device convenience
 
@@ -33,50 +38,49 @@ function writeLast(s: Selection): void {
   }
 }
 
-function pick(list: Client[], want: Partial<Selection>, templates: string[]): Selection | null {
+function pick(list: Client[], want: Partial<Selection>, types: TypeOption[]): Selection | null {
   const client = list.find((c) => c.id === want.clientId) ?? list.find((c) => c.projects.some((p) => p.status === "active"));
   const active = client?.projects.filter((p) => p.status === "active") ?? [];
   const project = active.find((p) => p.id === want.projectId) ?? active[0];
   if (!client || !project) return null;
-  const template = want.template && templates.includes(want.template) ? want.template : templates[0] ?? "general";
-  return { clientId: client.id, clientName: client.name, projectId: project.id, projectName: project.name, template };
+  const template = want.template && types.some((t) => t.key === want.template) ? want.template : types[0]?.key ?? "general";
+  return { clientId: client.id, clientName: client.name, logoVersion: client.logoVersion, projectId: project.id, projectName: project.name, template };
 }
 
-const label = (t: string) => t.replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase());
-
-/**
- * Loads the client list, restores the last selection, and lets the owner change
- * it in a bottom sheet (21st.dev Drawer + Segmented Control).
- */
-export function useClientSelection(templates: string[]) {
+/** Loads clients and meeting types, restores the last selection, and keeps both fresh. */
+export function useClientSelection(initialTypes: TypeOption[]) {
   const [clients, setClients] = useState<Client[] | null>(null);
+  const [types, setTypes] = useState<TypeOption[]>(initialTypes);
   const [selection, setSelection] = useState<Selection | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  async function refresh(prefer?: Partial<Selection>) {
+  const refresh = useCallback(async (prefer?: Partial<Selection>) => {
     try {
-      const list = await loadDirectory();
+      const [list, typeRes] = await Promise.all([loadDirectory(), fetch("/api/meeting-types", { cache: "no-store" })]);
+      const t = typeRes.ok ? ((await typeRes.json()) as { types: TypeOption[] }).types.map(({ key, name }) => ({ key, name })) : initialTypes;
       setClients(list);
+      setTypes(t);
       setError(null);
-      const next = pick(list, { ...readLast(), ...selection, ...prefer }, templates);
-      setSelection(next);
-      if (next) writeLast(next);
+      setSelection((current) => {
+        const next = pick(list, { ...readLast(), ...current, ...prefer }, t);
+        if (next) writeLast(next);
+        return next;
+      });
     } catch {
       setError("Couldn't load clients.");
     }
-  }
+  }, [initialTypes]);
 
   useEffect(() => {
     void refresh();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [refresh]);
 
   function choose(s: Selection) {
     setSelection(s);
     writeLast(s);
   }
 
-  return { clients, selection, error, refresh, choose };
+  return { clients, types, selection, error, refresh, choose };
 }
 
 export function ClientSheet({
@@ -84,29 +88,31 @@ export function ClientSheet({
   onClose,
   clients,
   selection,
-  templates,
+  types,
   onChoose,
   onRefresh,
+  onEditTypes,
 }: {
   open: boolean;
   onClose: () => void;
   clients: Client[];
   selection: Selection | null;
-  templates: string[];
+  types: TypeOption[];
   onChoose: (s: Selection) => void;
   onRefresh: (prefer?: Partial<Selection>) => Promise<void>;
+  onEditTypes: () => void;
 }) {
   const [clientId, setClientId] = useState(selection?.clientId ?? "");
   const [adding, setAdding] = useState<"client" | "project" | null>(null);
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
-  const [template, setTemplate] = useState(selection?.template ?? templates[0]);
+  const [template, setTemplate] = useState(selection?.template ?? types[0]?.key);
 
   // Reset only when the sheet opens; the client list refreshing mid-flow (after "New client") must not undo the step.
   useEffect(() => {
     if (!open) return;
     setClientId(selection?.clientId ?? clients[0]?.id ?? "");
-    setTemplate(selection?.template ?? templates[0]);
+    setTemplate(selection?.template ?? types[0]?.key);
     setAdding(clients.length === 0 ? "client" : null);
     setName("");
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -139,31 +145,46 @@ export function ClientSheet({
     setBusy(false);
   }
 
+  const heading = "text-xs font-semibold uppercase tracking-wider text-muted-foreground";
+
   return (
     <Drawer open={open} onOpenChange={(o) => !o && onClose()}>
       <DrawerContent title="Recording for">
         <div className="flex flex-col gap-5 pb-2">
-          {clients.length > 0 && (
-            <section className="flex flex-col gap-2">
-              <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Client</h3>
-              <div className="flex flex-wrap gap-2">
-                {clients.map((c) => (
-                  <button
-                    key={c.id}
-                    type="button"
-                    aria-pressed={c.id === clientId}
-                    onClick={() => { setClientId(c.id); setAdding(null); }}
-                    className={cn("min-h-10 rounded-full border px-4 text-[15px]", c.id === clientId ? "border-foreground bg-foreground text-background" : "")}
-                  >
-                    {c.name}
-                  </button>
-                ))}
-                <button type="button" onClick={() => { setAdding("client"); setName(""); }} className="flex min-h-10 items-center gap-1 rounded-full border border-dashed px-3.5 text-[15px] text-muted-foreground">
-                  <Plus className="size-4" aria-hidden="true" /> New
+          <section className="flex flex-col gap-2">
+            <div className="flex min-h-8 items-center justify-between">
+              <h3 className={heading}>Client</h3>
+              {client && (
+                <Link href={`/c/${client.id}`} aria-label={`Open ${client.name}`} className="grid size-9 place-items-center rounded-full text-muted-foreground hover:bg-muted">
+                  <Pencil className="size-4" aria-hidden="true" />
+                </Link>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {clients.map((c) => (
+                <button
+                  key={c.id}
+                  type="button"
+                  aria-pressed={c.id === clientId}
+                  onClick={() => { setClientId(c.id); setAdding(null); }}
+                  className={cn(
+                    "flex min-h-10 items-center gap-2 rounded-full border py-1 pl-1 pr-4 text-[15px]",
+                    c.id === clientId ? "border-foreground bg-foreground text-background" : "",
+                  )}
+                >
+                  <ClientAvatar client={c} size={30} className="rounded-full" />
+                  {c.name}
                 </button>
-              </div>
-            </section>
-          )}
+              ))}
+              <button
+                type="button"
+                onClick={() => { setAdding("client"); setName(""); }}
+                className={cn("flex min-h-10 items-center gap-1 rounded-full border border-dashed px-3.5 text-[15px]", adding === "client" ? "border-link text-link" : "text-muted-foreground")}
+              >
+                <Plus className="size-4" aria-hidden="true" /> New client
+              </button>
+            </div>
+          </section>
 
           {adding && (
             <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); void create(); }}>
@@ -183,7 +204,7 @@ export function ClientSheet({
 
           {client && adding !== "client" && (
             <section className="flex flex-col gap-2">
-              <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Project</h3>
+              <h3 className={heading}>Project</h3>
               <ul className="overflow-hidden rounded-xl bg-surface">
                 {projects.map((p) => {
                   const current = selection?.projectId === p.id;
@@ -192,7 +213,7 @@ export function ClientSheet({
                       <button
                         type="button"
                         onClick={() => {
-                          onChoose({ clientId: client.id, clientName: client.name, projectId: p.id, projectName: p.name, template });
+                          onChoose({ clientId: client.id, clientName: client.name, logoVersion: client.logoVersion, projectId: p.id, projectName: p.name, template: template ?? types[0]?.key });
                           onClose();
                         }}
                         className="flex min-h-12 w-full items-center gap-3 px-4 text-left text-[15px]"
@@ -212,9 +233,14 @@ export function ClientSheet({
             </section>
           )}
 
-          {templates.length > 1 && (
+          {types.length > 0 && (
             <section className="flex flex-col gap-2">
-              <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Meeting type</h3>
+              <div className="flex min-h-8 items-center justify-between">
+                <h3 className={heading}>Meeting type</h3>
+                <button type="button" onClick={onEditTypes} aria-label="Edit meeting types" className="grid size-9 place-items-center rounded-full text-muted-foreground hover:bg-muted">
+                  <Pencil className="size-4" aria-hidden="true" />
+                </button>
+              </div>
               <SegmentedControl
                 size="sm"
                 fullWidth
@@ -224,7 +250,7 @@ export function ClientSheet({
                   setTemplate(t);
                   if (selection) onChoose({ ...selection, template: t });
                 }}
-                options={templates.map((t) => ({ value: t, label: label(t) }))}
+                options={types.map((t) => ({ value: t.key, label: t.name }))}
               />
             </section>
           )}
@@ -233,5 +259,3 @@ export function ClientSheet({
     </Drawer>
   );
 }
-
-export { label as templateLabel };

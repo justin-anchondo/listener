@@ -519,6 +519,7 @@ function EditSummary({
                   open_questions: lines(f.open_questions),
                 },
                 free_tags: c.free_tags,
+                participants: c.participants ?? [],
               }, tags);
               setSaving(false);
             }}

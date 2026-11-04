@@ -1,8 +1,7 @@
 import { ChevronLeft } from "lucide-react";
 import Link from "next/link";
-import { ThemeSwitch } from "@/components/ui/theme-switch";
 
-/** Top of every signed in screen: optional back link, title, and the theme switch. */
+/** Top of every signed in screen: optional back link, title, and actions. */
 export function PageHeader({
   title,
   back,
@@ -25,10 +24,7 @@ export function PageHeader({
         ) : (
           <span className="text-[17px] font-bold tracking-tight">Listener</span>
         )}
-        <div className="flex shrink-0 items-center gap-2">
-          {actions}
-          <ThemeSwitch />
-        </div>
+        {actions ? <div className="flex shrink-0 items-center gap-1">{actions}</div> : null}
       </div>
       {title ? <h1 className="text-[26px] font-bold leading-tight tracking-tight">{title}</h1> : null}
       {meta ? <p className="text-[13px] text-muted-foreground">{meta}</p> : null}

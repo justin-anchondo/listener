@@ -29,6 +29,7 @@ export const FeedbackOut = z.object({
 
 export const MeetingOutput = z.object({
   title: z.string().describe("Short meeting title, under 80 characters"),
+  participants: z.array(z.string()).describe("Names of people on the call other than the owner, as far as the transcript shows; empty if unknown"),
   purpose: z.string(),
   summary: z.string().describe("One or two short paragraphs"),
   main_points: z.array(z.string()),
@@ -55,6 +56,7 @@ export const SummaryContent = z.object({
   key_quotes: z.array(z.object({ quote: z.string(), speaker: z.string(), at_ms: z.number().int().nonnegative() })),
   feedback: FeedbackOut,
   free_tags: z.array(z.string()),
+  participants: z.array(z.string()).default([]),
 });
 
 export type SummaryContentT = z.infer<typeof SummaryContent>;
@@ -133,6 +135,7 @@ export function cleanOutput(
       open_questions: list(out.feedback.open_questions, l),
     },
     free_tags: freeTags,
+    participants: [...new Set((out.participants ?? []).map((p) => clip(p, 60)).filter((p) => p && p.toLowerCase() !== "me"))].slice(0, 12),
   };
 
   const actionItems = out.action_items

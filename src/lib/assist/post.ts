@@ -3,6 +3,7 @@ import { buildPostMeetingPrompt } from "@/lib/assist/prompt";
 import { cleanOutput } from "@/lib/assist/schema";
 import { talkStats } from "@/lib/assist/stats";
 import type { Config } from "@/lib/config";
+import { defaultTypeName, getMeetingType } from "@/lib/db/meetingTypes";
 import { loadMeetingContext, saveGeneratedSummary } from "@/lib/db/summaries";
 
 export class NothingToSummarizeError extends Error {
@@ -45,14 +46,15 @@ export async function summarizeMeeting(
   if (ctx.segments.length === 0) throw new NothingToSummarizeError();
 
   const stats = talkStats(ctx.segments, ctx.speakerMap);
+  const type = await getMeetingType(ctx.template);
   const { date, weekday } = localDate(ctx.startedAt, timeZone);
   const prompt = buildPostMeetingPrompt({
     clientName: ctx.clientName,
     projectName: ctx.projectName,
     brief: ctx.brief,
     amendments: ctx.amendments.map((a) => ({ date: localDate(a.date, timeZone).date, text: a.text })),
-    template: ctx.template,
-    watchFor: config.templates[ctx.template]?.watch_for ?? [],
+    template: type?.name ?? defaultTypeName(ctx.template),
+    watchFor: type?.watchFor ?? config.templates[ctx.template]?.watch_for ?? [],
     meetingDate: date,
     weekday,
     segments: ctx.segments,

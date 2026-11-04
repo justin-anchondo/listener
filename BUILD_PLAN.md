@@ -148,7 +148,7 @@ Done when: outputs are ready within `assist.post_meeting_timeout_seconds` on a 6
 
 ### Phase 4: Live assistant and recall
 
-- Project brief editor and templates (from `config.yaml`).
+- Project brief editor and templates (starting types from `config.yaml`, editable in the app; done early).
 - Live loop on `assist.live_interval_seconds` plus triggers (question to owner, commitment or date mentioned, brief open question mentioned).
 - Suggestion cards with dismiss and pin.
 - Recall box: answers from the current client's data only, with citations, and "not found" when absent.

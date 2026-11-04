@@ -132,3 +132,33 @@ describe("phase 3 limits", () => {
     expect(() => cleanEditedSummary({ content: { title: "T", key_quotes: [{ quote: "q", speaker: "s", at_ms: -1 }] } }, l)).toThrow(LimitError);
   });
 });
+
+import { cleanLogo, cleanWatchFor, meetingTypeKey } from "@/lib/policy/limits";
+
+describe("logos and meeting types", () => {
+  const png = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(20)]);
+  const url = (mime: string, b: Buffer) => `data:${mime};base64,${b.toString("base64")}`;
+
+  it("accepts a real PNG within the size limit", () => {
+    expect(cleanLogo(url("image/png", png), 1000)).toEqual({ mime: "image/png", base64: png.toString("base64") });
+  });
+
+  it("refuses SVG, mismatched bytes, oversize files, and junk", () => {
+    expect(() => cleanLogo(url("image/svg+xml", Buffer.from("<svg onload=alert(1)>")), 1000)).toThrow(LimitError);
+    expect(() => cleanLogo(url("image/jpeg", png), 1000)).toThrow(LimitError);
+    expect(() => cleanLogo(url("image/png", png), 10)).toThrow(LimitError);
+    expect(() => cleanLogo("not a data url", 1000)).toThrow(LimitError);
+    expect(() => cleanLogo(42, 1000)).toThrow(LimitError);
+  });
+
+  it("derives stable meeting type keys", () => {
+    expect(meetingTypeKey("Status update")).toBe("status_update");
+    expect(meetingTypeKey("  Q&A / Demo!! ")).toBe("q_a_demo");
+    expect(meetingTypeKey("***")).toBe("type");
+  });
+
+  it("cleans watch-for lists", () => {
+    expect(cleanWatchFor([" budget ", "budget", "next  steps", ""], 10, 60)).toEqual(["budget", "next steps"]);
+    expect(() => cleanWatchFor(["x".repeat(61)], 10, 60)).toThrow(LimitError);
+  });
+});

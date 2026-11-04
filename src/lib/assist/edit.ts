@@ -38,6 +38,7 @@ export function cleanEditedSummary(body: Record<string, unknown>, l: EditLimits)
         open_questions: list(fb.open_questions, "feedback"),
       },
       free_tags: cleanList(c.free_tags ?? [], l.maxFreeTags, 40, "free_tags"),
+      participants: cleanList(c.participants ?? [], l.maxListItems, 60, "participants"),
     },
   };
 }

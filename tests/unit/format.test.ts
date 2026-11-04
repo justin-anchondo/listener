@@ -57,3 +57,13 @@ describe("due chips", () => {
     expect(s).toEqual({ overdue: 1, week: 2, none: 1 });
   });
 });
+
+import { initials } from "@/components/app/client-avatar";
+
+describe("initials", () => {
+  it("takes up to two letters", () => {
+    expect(initials("Acme Corp")).toBe("AC");
+    expect(initials("northwind")).toBe("N");
+    expect(initials("  ")).toBe("?");
+  });
+});

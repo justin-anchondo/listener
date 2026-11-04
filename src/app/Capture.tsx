@@ -4,9 +4,12 @@ import { AlertTriangle, ChevronDown, Mic } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ClientSheet, templateLabel, useClientSelection } from "@/components/app/client-sheet";
+import { ClientAvatar } from "@/components/app/client-avatar";
+import { ClientSheet, useClientSelection } from "@/components/app/client-sheet";
+import { MeetingTypesSheet } from "@/components/app/edit-sheets";
 import { PageHeader } from "@/components/app/page-header";
 import { RecorderBar } from "@/components/app/recorder-bar";
+import { ThemeToggle } from "@/components/ui/theme-toggle";
 import type { CaptureSettings } from "@/lib/config";
 import {
   CaptureSession,
@@ -57,6 +60,7 @@ export default function Capture({ settings }: { settings: CaptureSettings }) {
   const [meetingId, setMeetingId] = useState<string | null>(null);
   const [summary, setSummary] = useState<SummaryState>({ state: "idle" });
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [typesOpen, setTypesOpen] = useState(false);
   const [due, setDue] = useState<{ overdue: number; week: number } | null>(null);
   const session = useRef<CaptureSession | null>(null);
   const uploader = useRef<SegmentUploader | null>(null);
@@ -65,7 +69,7 @@ export default function Capture({ settings }: { settings: CaptureSettings }) {
   const level = useRef(0);
   const bottom = useRef<HTMLDivElement>(null);
 
-  const { clients, selection, error: dirError, refresh, choose } = useClientSelection(settings.templates);
+  const { clients, types, selection, error: dirError, refresh, choose } = useClientSelection(settings.templates);
 
   const active = status === "starting" || status === "live" || status === "reconnecting" || status === "stalled";
   const finishing = saveState === "finishing";
@@ -227,10 +231,11 @@ export default function Capture({ settings }: { settings: CaptureSettings }) {
     : saveState === "failed" ? "Some lines couldn't be saved" : "";
 
   // ---------- Recording ----------
+  const typeName = types.find((t) => t.key === selection?.template)?.name;
   if (busy) {
     return (
       <div className="flex min-h-dvh flex-col">
-        <PageHeader meta={selection ? `${selection.clientName} · ${selection.projectName}` : undefined} />
+        <PageHeader meta={selection ? `${selection.clientName} · ${selection.projectName}${typeName ? ` · ${typeName}` : ""}` : undefined} />
 
         <div className="flex flex-col gap-2 px-5 pt-2">
           {status === "stalled" && (
@@ -314,7 +319,7 @@ export default function Capture({ settings }: { settings: CaptureSettings }) {
   // ---------- Ready ----------
   return (
     <>
-      <PageHeader />
+      <PageHeader actions={<ThemeToggle />} />
       <main className="flex flex-1 flex-col items-center justify-center gap-9 px-5 py-6">
         {status === "error" && <div className="w-full"><Banner>{describeCaptureError(detail)}</Banner></div>}
         {dirError && <div className="w-full"><Banner>{dirError}</Banner></div>}
@@ -329,6 +334,7 @@ export default function Capture({ settings }: { settings: CaptureSettings }) {
           >
             {selection ? (
               <>
+                <ClientAvatar client={{ id: selection.clientId, name: selection.clientName, logoVersion: selection.logoVersion }} size={26} className="-ml-2 rounded-full" />
                 <span className="truncate font-semibold">{selection.clientName}</span>
                 <span className="text-muted-foreground">/</span>
                 <span className="truncate">{selection.projectName}</span>
@@ -338,9 +344,9 @@ export default function Capture({ settings }: { settings: CaptureSettings }) {
             )}
             <ChevronDown className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
           </button>
-          {selection && settings.templates.length > 1 && (
+          {selection && typeName && (
             <button type="button" onClick={() => setSheetOpen(true)} className="min-h-8 rounded-full bg-muted px-3 text-[13px] text-muted-foreground">
-              {templateLabel(selection.template)}
+              {typeName}
             </button>
           )}
         </div>
@@ -395,11 +401,13 @@ export default function Capture({ settings }: { settings: CaptureSettings }) {
           onClose={() => setSheetOpen(false)}
           clients={clients}
           selection={selection}
-          templates={settings.templates}
+          types={types}
           onChoose={choose}
           onRefresh={refresh}
+          onEditTypes={() => { setSheetOpen(false); setTypesOpen(true); }}
         />
       )}
+      <MeetingTypesSheet open={typesOpen} onClose={() => { setTypesOpen(false); setSheetOpen(true); }} onChanged={() => void refresh()} />
     </>
   );
 }

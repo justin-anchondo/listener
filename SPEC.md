@@ -147,6 +147,7 @@ Rules:
 
 - Every table holding client data carries `client_id`. Every query filters on it, enforced in the data access layer and by database policy.
 - The client and project picker may list all clients and projects (names only). It is the second cross client view, alongside consolidated open items.
+- The recent meetings list may show meetings across clients: title, participants, client, project, date, and open item count. It never shows transcript, summary body, or brief text, and is never sent to a model. It is the third cross client view.
 - Prompts sent to the model contain data from exactly one client. The consolidated open items view is built from action item fields and is never sent to a model with other clients' data in the same request.
 
 ### 6.4 Vendors and keys

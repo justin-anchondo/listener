@@ -9,6 +9,7 @@ const seg = (speaker: number | null, startMs: number, endMs: number, text: strin
 
 const output = (over: Partial<MeetingOutputT> = {}): MeetingOutputT => ({
   title: "Kickoff",
+  participants: ["Dana"],
   purpose: "Plan launch",
   summary: "We planned the launch.",
   main_points: ["Scope agreed"],
@@ -177,5 +178,13 @@ describe("brief updates", () => {
     expect(p.user).toContain("<project_brief>\nOriginal goals\n</project_brief>");
     expect(p.user).toContain("- 2026-10-28: Dana is the design approver.");
     expect(SYSTEM_PROMPT).toMatch(/Brief updates/);
+  });
+});
+
+import { participantNames } from "@/lib/db/recent";
+
+describe("participantNames", () => {
+  it("merges summary and speaker names without the owner or duplicates", () => {
+    expect(participantNames(["Dana", "me"], { "0": "Me", "1": "dana", "2": "Sam " })).toEqual(["Dana", "Sam"]);
   });
 });

@@ -40,3 +40,19 @@ export async function withOpenItems<T>(fn: (tx: Tx) => Promise<T>): Promise<T> {
     return fn(tx);
   })) as T;
 }
+
+/** Owner settings that aren't client data, such as meeting types. */
+export async function withSettings<T>(fn: (tx: Tx) => Promise<T>): Promise<T> {
+  return (await db().begin(async (tx) => {
+    await tx`select set_config('search_path', 'listener', true), set_config('app.scope', 'settings', true)`;
+    return fn(tx);
+  })) as T;
+}
+
+/** Recent meetings across clients (SPEC 6.3): meeting rows and summaries, read only. Never sent to a model. */
+export async function withRecent<T>(fn: (tx: Tx) => Promise<T>): Promise<T> {
+  return (await db().begin("read only", async (tx) => {
+    await tx`select set_config('search_path', 'listener', true), set_config('app.scope', 'recent', true)`;
+    return fn(tx);
+  })) as T;
+}

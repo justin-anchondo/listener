@@ -74,3 +74,34 @@ export function cleanList(value: unknown, maxItems: number, maxChars: number, fi
     return v.trim();
   }).filter(Boolean);
 }
+
+const LOGO_TYPES: Record<string, (b: Buffer) => boolean> = {
+  "image/png": (b) => b.length > 8 && b.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])),
+  "image/jpeg": (b) => b.length > 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff,
+  "image/webp": (b) => b.length > 12 && b.subarray(0, 4).toString("ascii") === "RIFF" && b.subarray(8, 12).toString("ascii") === "WEBP",
+};
+
+/**
+ * A client logo sent as a data URL. Only PNG, JPEG, or WebP whose bytes match
+ * the declared type, and no larger than maxBytes. SVG is refused (it can carry script).
+ */
+export function cleanLogo(value: unknown, maxBytes: number): { mime: string; base64: string } {
+  if (typeof value !== "string") throw new LimitError("logo");
+  const m = /^data:(image\/(?:png|jpeg|webp));base64,([A-Za-z0-9+/]+=*)$/.exec(value);
+  if (!m) throw new LimitError("logo");
+  const bytes = Buffer.from(m[2], "base64");
+  if (bytes.length === 0 || bytes.length > maxBytes || !LOGO_TYPES[m[1]](bytes)) throw new LimitError("logo");
+  return { mime: m[1], base64: bytes.toString("base64") };
+}
+
+/** Stable key for a meeting type name: "Status update" -> "status_update". */
+export function meetingTypeKey(name: string): string {
+  const key = name.toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 40);
+  return key || "type";
+}
+
+/** What the assistant watches for in a meeting type: short phrases, one per entry. */
+export function cleanWatchFor(value: unknown, maxItems: number, maxChars: number): string[] {
+  const list = cleanList(value ?? [], maxItems, maxChars, "watch_for");
+  return [...new Set(list.map((s) => s.replace(/\s+/g, " ")))];
+}

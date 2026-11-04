@@ -5,7 +5,7 @@ import { withClient, withDirectory } from "@/lib/db/scoped";
 import { audit } from "@/lib/db/audit";
 
 export type ProjectSummary = { id: string; name: string; status: "active" | "archived" };
-export type ClientSummary = { id: string; name: string; projects: ProjectSummary[] };
+export type ClientSummary = { id: string; name: string; logoVersion: number | null; projects: ProjectSummary[] };
 
 const CLIENT_NAME = "clients.name";
 const PROJECT_NAME = "projects.name";
@@ -14,8 +14,8 @@ const PROJECT_BRIEF = "projects.brief";
 /** All clients and their projects, names decrypted, sorted by name. */
 export async function listDirectory(): Promise<ClientSummary[]> {
   const { clients, projects } = await withDirectory(async (tx) => ({
-    clients: await tx<{ id: string; name_enc: string; wrapped_dek: string }[]>`
-      select id, name_enc, wrapped_dek from clients`,
+    clients: await tx<{ id: string; name_enc: string; wrapped_dek: string; logo_updated_at: Date | null }[]>`
+      select id, name_enc, wrapped_dek, case when logo_enc is null then null else logo_updated_at end as logo_updated_at from clients`,
     projects: await tx<{ id: string; client_id: string; name_enc: string; status: "active" | "archived" }[]>`
       select id, client_id, name_enc, status from projects`,
   }));
@@ -24,6 +24,7 @@ export async function listDirectory(): Promise<ClientSummary[]> {
     const dek = unwrapDataKey(master, c.wrapped_dek, c.id);
     return {
       id: c.id,
+      logoVersion: c.logo_updated_at ? c.logo_updated_at.getTime() : null,
       name: decryptField(dek, { clientId: c.id, column: CLIENT_NAME, rowId: c.id }, c.name_enc),
       projects: projects
         .filter((p) => p.client_id === c.id)
@@ -105,5 +106,27 @@ export async function getProjectBrief(clientId: string, projectId: string): Prom
     if (!rows[0].brief_enc) return null;
     const dek = await clientKey(tx, id);
     return decryptField(dek, { clientId: id, column: PROJECT_BRIEF, rowId: projectId }, rows[0].brief_enc);
+  });
+}
+
+const CLIENT_LOGO = "clients.logo";
+
+/** Stores (or with null, removes) the client's logo, encrypted with its key. */
+export async function setClientLogo(clientId: string, logo: { mime: string; base64: string } | null): Promise<void> {
+  await withClient(clientId, async (tx, id) => {
+    const dek = await clientKey(tx, id);
+    const enc = logo ? encryptField(dek, { clientId: id, column: CLIENT_LOGO, rowId: id }, `${logo.mime};${logo.base64}`) : null;
+    await tx`update clients set logo_enc = ${enc}, logo_updated_at = ${logo ? new Date() : null} where id = ${id}`;
+  });
+}
+
+export async function getClientLogo(clientId: string): Promise<{ mime: string; bytes: Buffer } | null> {
+  return withClient(clientId, async (tx, id) => {
+    const [row] = await tx<{ logo_enc: string | null }[]>`select logo_enc from clients where id = ${id}`;
+    if (!row) throw new NotFoundError("client");
+    if (!row.logo_enc) return null;
+    const dek = await clientKey(tx, id);
+    const [mime, base64] = decryptField(dek, { clientId: id, column: CLIENT_LOGO, rowId: id }, row.logo_enc).split(";");
+    return { mime, bytes: Buffer.from(base64, "base64") };
   });
 }

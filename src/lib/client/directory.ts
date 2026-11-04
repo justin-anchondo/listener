@@ -1,7 +1,7 @@
 // Browser helpers for the client and project list (names only, SPEC 6.3).
 
 export type Project = { id: string; name: string; status: "active" | "archived" };
-export type Client = { id: string; name: string; projects: Project[] };
+export type Client = { id: string; name: string; logoVersion: number | null; projects: Project[] };
 
 export async function loadDirectory(): Promise<Client[]> {
   const res = await fetch("/api/directory", { cache: "no-store" });
