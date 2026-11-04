@@ -17,16 +17,6 @@ export type LiveCard = {
 
 export type LiveStatus = "off" | "idle" | "thinking" | "paused" | "unavailable";
 
-const ENABLED_KEY = "listener.liveTips"; // per device preference
-
-function readEnabled(): boolean {
-  try {
-    return localStorage.getItem(ENABLED_KEY) !== "0";
-  } catch {
-    return true;
-  }
-}
-
 /**
  * Live talking points during a recording (SPEC 4.1). Checks on the interval
  * and right after a trigger line, one request at a time, sending only the
@@ -37,16 +27,18 @@ export function useLiveAssist({
   clientId,
   meetingId,
   recording,
+  enabled,
   entries,
   settings,
 }: {
   clientId: string | null;
   meetingId: string | null;
   recording: boolean;
+  /** Off by default; the owner turns tips on per meeting. */
+  enabled: boolean;
   entries: TranscriptEntry[];
   settings: CaptureSettings;
 }) {
-  const [enabled, setEnabledState] = useState(true);
   const [cards, setCards] = useState<LiveCard[]>([]);
   const [status, setStatus] = useState<LiveStatus>("idle");
   const terms = useRef<string[]>([]);
@@ -54,17 +46,6 @@ export function useLiveAssist({
   const entriesRef = useRef(entries);
   entriesRef.current = entries;
   const limits = { intervalMs: settings.live.interval_seconds * 1000, minGapMs: settings.live.min_gap_seconds * 1000 };
-
-  useEffect(() => setEnabledState(readEnabled()), []);
-
-  const setEnabled = useCallback((on: boolean) => {
-    setEnabledState(on);
-    try {
-      localStorage.setItem(ENABLED_KEY, on ? "1" : "0");
-    } catch {
-      // storage unavailable; the toggle still works for this recording
-    }
-  }, []);
 
   // New meeting: reset, then fetch the topic words to listen for.
   useEffect(() => {
@@ -145,8 +126,6 @@ export function useLiveAssist({
   }, [clientId]);
 
   return {
-    enabled,
-    setEnabled,
     status: enabled ? status : ("off" as LiveStatus),
     cards: cards.filter((c) => !c.dismissed),
     pin: (c: LiveCard) => update(c, { pinned: !c.pinned }),

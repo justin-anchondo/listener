@@ -79,7 +79,7 @@ Confidentiality outranks convenience. When a feature and the security rules in s
 - It runs on a fixed cadence (config) and immediately when a trigger fires: a question directed at the owner, a mention of a deadline or commitment, or a topic in the project brief's open questions.
 - It produces at most a few short suggestions at a time: a talking point, a question to ask, a reminder of a prior commitment, or a flag that an agenda item has not come up yet.
 - Suggestions appear as cards that can be dismissed or pinned. Pinned cards are kept with the summary.
-- Each check sends the recent transcript window (config `assist.live_transcript_window_minutes`) with the cached client context; triggers are detected on the phone from finalized lines, and a trigger can't start a check sooner than `assist.live_min_gap_seconds` after the last one. Only one check runs at a time. The owner can turn live tips off.
+- Each check sends the recent transcript window (config `assist.live_transcript_window_minutes`) with the cached client context; triggers are detected on the phone from finalized lines, and a trigger can't start a check sooner than `assist.live_min_gap_seconds` after the last one. Only one check runs at a time. Live tips are off by default and turned on per meeting, before or during the call.
 
 ### 4.2 Live recall
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, ChevronDown, Mic, MessageCircleQuestion } from "lucide-react";
+import { AlertTriangle, ChevronDown, MessageCircleQuestion, Mic, Sparkles } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -67,6 +67,7 @@ export default function Capture({ settings }: { settings: CaptureSettings }) {
   const [typesOpen, setTypesOpen] = useState(false);
   const [due, setDue] = useState<{ overdue: number; week: number } | null>(null);
   const [askOpen, setAskOpen] = useState(false);
+  const [liveOn, setLiveOn] = useState(false); // live tips, per meeting, off by default
   const session = useRef<CaptureSession | null>(null);
   const uploader = useRef<SegmentUploader | null>(null);
   const early = useRef<Omit<UploadSegment, "seq">[]>([]); // segments heard before the meeting record exists
@@ -79,7 +80,14 @@ export default function Capture({ settings }: { settings: CaptureSettings }) {
   const active = status === "starting" || status === "live" || status === "reconnecting" || status === "stalled";
   const finishing = saveState === "finishing";
   const busy = active || finishing;
-  const live = useLiveAssist({ clientId: selection?.clientId ?? null, meetingId, recording: active && !finishing, entries, settings });
+  const live = useLiveAssist({ clientId: selection?.clientId ?? null, meetingId, recording: active && !finishing, enabled: liveOn, entries, settings });
+
+  // Each meeting starts with live tips off unless turned on for it.
+  const wasBusy = useRef(false);
+  useEffect(() => {
+    if (wasBusy.current && !busy) setLiveOn(false);
+    wasBusy.current = busy;
+  }, [busy]);
 
   useEffect(() => {
     if (!active) return;
@@ -245,7 +253,7 @@ export default function Capture({ settings }: { settings: CaptureSettings }) {
           meta={selection ? `${selection.clientName} · ${selection.projectName}${typeName ? ` · ${typeName}` : ""}` : undefined}
           actions={selection && (
             <>
-              <LiveToggle enabled={live.enabled} status={live.status} onChange={live.setEnabled} />
+              <LiveToggle enabled={liveOn} status={live.status} onChange={setLiveOn} />
               <button type="button" onClick={() => setAskOpen(true)} aria-label={`Ask about ${selection.clientName}`} className="grid size-10 place-items-center rounded-full text-muted-foreground hover:bg-muted">
                 <MessageCircleQuestion className="size-5" aria-hidden="true" />
               </button>
@@ -288,7 +296,7 @@ export default function Capture({ settings }: { settings: CaptureSettings }) {
           )}
         </div>
 
-        {live.enabled && <LiveCards cards={live.cards} onPin={live.pin} onDismiss={live.dismiss} />}
+        {liveOn && <LiveCards cards={live.cards} onPin={live.pin} onDismiss={live.dismiss} />}
 
         <main aria-live="polite" className="flex flex-1 flex-col justify-end gap-4 px-5 pt-4 pb-40">
           {entries.length === 0 && !interim && (
@@ -365,10 +373,27 @@ export default function Capture({ settings }: { settings: CaptureSettings }) {
             )}
             <ChevronDown className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
           </button>
-          {selection && typeName && (
-            <button type="button" onClick={() => setSheetOpen(true)} className="min-h-8 rounded-full bg-muted px-3 text-[13px] text-muted-foreground">
-              {typeName}
-            </button>
+          {selection && (
+            <div className="flex items-center gap-2">
+              {typeName && (
+                <button type="button" onClick={() => setSheetOpen(true)} className="min-h-8 rounded-full bg-muted px-3 text-[13px] text-muted-foreground">
+                  {typeName}
+                </button>
+              )}
+              <button
+                type="button"
+                role="switch"
+                aria-checked={liveOn}
+                onClick={() => setLiveOn((v) => !v)}
+                className={cn(
+                  "flex min-h-8 items-center gap-1.5 rounded-full border px-3 text-[13px]",
+                  liveOn ? "border-link/40 text-link" : "border-transparent bg-muted text-muted-foreground",
+                )}
+              >
+                <Sparkles className="size-3.5" aria-hidden="true" />
+                Live tips {liveOn ? "on" : "off"}
+              </button>
+            </div>
           )}
         </div>
 

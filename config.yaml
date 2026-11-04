@@ -58,8 +58,8 @@ models:                             # BUILD_PLAN 1
   post: claude-opus-5-5             # summary, action items, feedback
 
 assist:                             # SPEC 4
-  live_interval_seconds: 30
-  live_max_suggestions: 3
+  live_interval_seconds: 90         # regular check while live tips are on (triggers can come sooner)
+  live_max_suggestions: 1          # cards per check
   live_max_latency_ms: 4000
   live_transcript_window_minutes: 10
   post_meeting_timeout_seconds: 60  # target for summary readiness (SPEC 9)
@@ -75,7 +75,7 @@ assist:                             # SPEC 4
   live_effort: low                  # live cards: fast, thinking off
   live_max_tokens: 1200
   live_request_timeout_seconds: 12
-  live_min_gap_seconds: 10          # a trigger can't start a new check sooner than this after the last
+  live_min_gap_seconds: 30          # a trigger can't start a new check sooner than this after the last
   live_recent_summaries: 3          # earlier meetings on the project the live assistant reads
   live_open_items: 20               # open action items on the project it reads
   live_card_chars: 280              # longest card text
