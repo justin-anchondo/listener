@@ -31,6 +31,8 @@ export type CaptureCallbacks = {
   onEntry(entry: TranscriptEntry): void;
   onInterim(text: string | null): void;
   onDiagnostics(diag: Diagnostics): void;
+  /** Mic level per audio frame (0 to 1), for a waveform. Called often: don't set React state here. */
+  onLevel?(level: number): void;
 };
 
 const LAG_SAMPLES_KEPT = 200;
@@ -202,6 +204,7 @@ export class CaptureSession {
   private onFrame(frame: Float32Array): void {
     this.lastFrameAtMs = performance.now();
     this.level = rms(frame);
+    this.cb.onLevel?.(this.level);
     if (!this.downsampler) return;
     const pcm = this.downsampler.process(frame);
     this.pending.push(pcm);

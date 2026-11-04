@@ -27,3 +27,33 @@ describe("format", () => {
     expect(dueGroup("2026-11-01", "2026-11-04", today)).toBe("overdue");
   });
 });
+
+import { dueChip, dueSummary, fmtShort } from "@/lib/format";
+
+describe("due chips", () => {
+  const today = "2026-11-04"; // Wednesday
+  it("labels overdue, soon, later, and undated items", () => {
+    expect(dueChip("2026-11-02", today)).toEqual({ label: "Overdue · Mon", tone: "overdue" });
+    expect(dueChip("2026-11-04", today)).toEqual({ label: "Due today", tone: "soon" });
+    expect(dueChip("2026-11-06", today)).toEqual({ label: "Due Fri", tone: "soon" });
+    expect(dueChip("2026-11-20", today)).toEqual({ label: "Nov 20", tone: "later" });
+    expect(dueChip(null, today)).toEqual({ label: "+ Date", tone: "none" });
+    expect(dueChip("2026-11-02", today, true).tone).toBe("done");
+  });
+
+  it("formats short dates", () => {
+    expect(fmtShort("2026-11-06", "2026-11-04")).toBe("Fri");
+    expect(fmtShort("2026-12-01", "2026-11-04")).toBe("Dec 1");
+  });
+
+  it("summarizes counts and ignores snoozed items", () => {
+    const s = dueSummary([
+      { dueDate: "2026-11-01" },
+      { dueDate: "2026-11-05" },
+      { dueDate: "2026-11-04" },
+      { dueDate: null },
+      { dueDate: "2026-11-01", snoozedUntil: "2026-11-10" },
+    ], "2026-11-04");
+    expect(s).toEqual({ overdue: 1, week: 2, none: 1 });
+  });
+});

@@ -1,9 +1,6 @@
-import { requirePageSession } from "@/lib/auth/guard";
-import Manage from "./Manage";
+import { redirect } from "next/navigation";
 
-export const dynamic = "force-dynamic";
-
-export default async function ManagePage() {
-  await requirePageSession();
-  return <Manage />;
+// Managing clients and projects now lives on the Meetings tab.
+export default function ManagePage() {
+  redirect("/meetings");
 }

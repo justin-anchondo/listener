@@ -53,9 +53,11 @@ Open the stable address on the iPhone, enter the access code once, and approve F
 
 ## Daily use
 
-1. Pick the client, project, and meeting type (the last choice is remembered). Use **+** to add one on the spot, or **Manage** to rename, archive, write a project brief, or delete a client.
-2. Tap **Start**. The bar under the status shows the client and project and whether lines are saving.
-3. Tap **Stop**. It saves the last lines, then shows **Saved**.
+Three tabs at the bottom: **Record**, **Meetings**, **Open items**. The sun and moon switch at the top switches light and dark mode; the phone remembers it.
+
+1. **Record:** tap the client / project pill to choose (or add) a client, project, and meeting type in the sheet that slides up. Your last choice is remembered. Tap the big button to start.
+2. While recording, the transcript fills the screen and the bar at the bottom shows the timer and mic level. Tap **ⓘ** for connection details, **■** to stop.
+3. **Meetings:** clients and their projects. Tap a project for its meetings. **Edit** renames, archives, writes project briefs, or deletes a client.
 
 After **Stop**, the summary and action items are generated automatically (usually under a minute). Tap **View** to open the meeting:
 
@@ -63,7 +65,7 @@ After **Stop**, the summary and action items are generated automatically (usuall
 - Under **Speakers**, name the people on the call and pick which one is **Me**, then **Regenerate** for feedback on your own talk time.
 - **Edit summary** saves a new version. Earlier versions are kept.
 
-**Open items** lists everything still open across every client, grouped by due date, with snooze.
+**Open items** lists everything still open: **All clients** groups by due date (overdue, today, next 7 days, later, no date, snoozed); **By client** groups by client with open and overdue counts. Each item has a due date chip (red overdue, amber due soon); tap it to pick a date. Tap an item to edit it, snooze it a week, or open its meeting.
 
 Transcripts are kept 30 days after the meeting ends, then deleted by a daily job. Summaries and action items are kept. Audio is never stored.
 

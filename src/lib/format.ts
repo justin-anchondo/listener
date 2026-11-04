@@ -44,3 +44,36 @@ export function dueGroup(dueDate: string | null, snoozedUntil: string | null, to
   week.setDate(week.getDate() + 7);
   return dueDate <= localIsoDate(0, week) ? "week" : "later";
 }
+
+export type DueTone = "overdue" | "soon" | "later" | "none" | "done";
+
+/** The due date chip on an action item: what it says and how loud it is. */
+export function dueChip(dueDate: string | null, today: string, done = false): { label: string; tone: DueTone } {
+  if (done) return { label: dueDate ? fmtShort(dueDate, today) : "Done", tone: "done" };
+  if (!dueDate) return { label: "+ Date", tone: "none" };
+  if (dueDate < today) return { label: `Overdue · ${fmtShort(dueDate, today)}`, tone: "overdue" };
+  if (dueDate === today) return { label: "Due today", tone: "soon" };
+  const week = localIsoDate(7, new Date(`${today}T12:00:00`));
+  if (dueDate <= week) return { label: `Due ${fmtShort(dueDate, today)}`, tone: "soon" };
+  return { label: fmtShort(dueDate, today), tone: "later" };
+}
+
+/** "Fri" within the coming or past week, otherwise "Nov 14". */
+export function fmtShort(isoDate: string, today: string): string {
+  const d = new Date(`${isoDate}T12:00:00`);
+  const days = Math.round((d.getTime() - new Date(`${today}T12:00:00`).getTime()) / 86_400_000);
+  if (Math.abs(days) <= 6) return d.toLocaleDateString("en-US", { weekday: "short" });
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+/** Counts for the "1 overdue · 3 due this week · 2 without a date" line. */
+export function dueSummary(items: { dueDate: string | null; snoozedUntil?: string | null }[], today: string) {
+  let overdue = 0, week = 0, none = 0;
+  for (const i of items) {
+    const g = dueGroup(i.dueDate, i.snoozedUntil ?? null, today);
+    if (g === "overdue") overdue++;
+    else if (g === "today" || g === "week") week++;
+    else if (g === "none") none++;
+  }
+  return { overdue, week, none };
+}

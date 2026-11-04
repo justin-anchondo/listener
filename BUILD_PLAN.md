@@ -34,6 +34,7 @@ flowchart TD
 | Scheduled jobs | Vercel Cron calling a protected route | Daily purge |
 | Hosting | Vercel (app), Supabase (database) | Managed, low maintenance |
 | Tests | Vitest (unit), Playwright (browser flows) | Policy functions get unit tests (CLAUDE.md rule 4) |
+| UI | Tailwind CSS v4 with shadcn style tokens (21st.dev "Modern Minimal"), 21st.dev components: Segmented Control (affectUI), Drawer (wensity, on Base UI), Sliding Icon Theme Switch (bundui); recording pill styled after Tweenly AI Recorder; lucide icons; motion | Clean phone first UI (design A), light and dark mode remembered per device in a cookie |
 
 ### Recall without a vector database
 

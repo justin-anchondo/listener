@@ -1,8 +1,11 @@
 "use client";
 
+import { ChevronRight } from "lucide-react";
+import Link from "next/link";
 import { useEffect, useState } from "react";
-import { daysUntil, fmtDateTime, minutesBetween } from "@/lib/format";
-import { loadDirectory } from "../../../MeetingPicker";
+import { PageHeader } from "@/components/app/page-header";
+import { loadDirectory } from "@/lib/client/directory";
+import { fmtDateTime, minutesBetween } from "@/lib/format";
 
 type Meeting = {
   id: string;
@@ -34,36 +37,34 @@ export default function ProjectMeetings({ clientId, projectId }: { clientId: str
   }, [clientId, projectId]);
 
   return (
-    <main className="page">
-      <header className="bar">
-        <a className="link" href="/">‹ Record</a>
-        <span className="label grow">{names ? `${names.client} · ${names.project}` : "Meetings"}</span>
-        <a className="link" href="/items">Open items</a>
-      </header>
-      {error && <p className="error pad">{error}</p>}
-      {!meetings && !error && <p className="muted pad">Loading…</p>}
-      {meetings?.length === 0 && <p className="muted pad">No meetings recorded for this project yet.</p>}
-      <ul className="meeting-list">
-        {meetings?.map((m) => {
-          const minutes = minutesBetween(m.startedAt, m.endedAt);
-          const days = m.transcriptExpiresAt ? daysUntil(m.transcriptExpiresAt) : null;
-          return (
-            <li key={m.id}>
-              <a href={`/m/${clientId}/${m.id}`}>
-                <strong>{m.title ?? "No summary yet"}</strong>
-                <span className="muted">
-                  {fmtDateTime(m.startedAt)}{minutes ? ` · ${minutes} min` : ""} · {m.template.replace(/_/g, " ")}
-                </span>
-                <span className="muted small-text">
-                  {m.openItems > 0 ? `${m.openItems} open item${m.openItems === 1 ? "" : "s"} · ` : ""}
-                  {days === null ? "transcript deleted" : `transcript kept ${Math.max(0, days)} more days`}
-                  {m.tags.length > 0 ? ` · ${m.tags.join(", ").replace(/_/g, " ")}` : ""}
-                </span>
-              </a>
-            </li>
-          );
-        })}
-      </ul>
-    </main>
+    <>
+      <PageHeader back={{ href: "/meetings", label: names?.client ?? "Meetings" }} title={names?.project ?? " "} />
+      <main className="flex flex-col px-5 pt-4">
+        {error && <p className="text-sm text-destructive" role="alert">{error}</p>}
+        {!meetings && !error && <p className="text-sm text-muted-foreground">Loading…</p>}
+        {meetings?.length === 0 && <p className="text-[15px] text-muted-foreground">No meetings recorded for this project yet.</p>}
+        <ul>
+          {meetings?.map((m) => {
+            const minutes = minutesBetween(m.startedAt, m.endedAt);
+            return (
+              <li key={m.id} className="border-b border-muted last:border-b-0">
+                <Link href={`/m/${clientId}/${m.id}`} className="flex min-h-16 items-center gap-3 py-3">
+                  <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                    <span className="truncate text-[15px] font-semibold">{m.title ?? "No summary yet"}</span>
+                    <span className="text-[13px] text-muted-foreground">
+                      {fmtDateTime(m.startedAt)}{minutes ? ` · ${minutes} min` : ""}
+                    </span>
+                  </span>
+                  {m.openItems > 0 && (
+                    <span className="rounded-full bg-accent px-2.5 py-1 text-xs font-semibold text-accent-foreground">{m.openItems} open</span>
+                  )}
+                  <ChevronRight className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+      </main>
+    </>
   );
 }

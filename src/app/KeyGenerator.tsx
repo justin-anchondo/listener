@@ -33,16 +33,18 @@ export default function KeyGenerator() {
   }
 
   return (
-    <div className="keys">
-      <p className="muted">
+    <div className="mt-2 flex flex-col gap-3">
+      <p className="text-[14px] text-muted-foreground">
         Fresh random values, made on this device. Save LISTENER_MASTER_KEY in your password manager: if it&apos;s lost,
         stored data can&apos;t be decrypted.
       </p>
       {Object.entries(values).map(([name, value]) => (
-        <div key={name} className="key">
-          <span>{name}</span>
-          <code>{value}</code>
-          <button className="small" onClick={() => copy(name, value)}>{copied === name ? "Copied" : "Copy"}</button>
+        <div key={name} className="flex flex-col gap-2 rounded-xl bg-surface p-3">
+          <span className="text-[13px] text-muted-foreground">{name}</span>
+          <code className="break-all text-[13px]">{value}</code>
+          <button type="button" onClick={() => copy(name, value)} className="min-h-10 self-start rounded-lg border px-3 text-[14px]">
+            {copied === name ? "Copied" : "Copy"}
+          </button>
         </div>
       ))}
     </div>

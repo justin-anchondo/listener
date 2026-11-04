@@ -1,6 +1,7 @@
 "use client";
 
 import { startAuthentication, startRegistration } from "@simplewebauthn/browser";
+import { Mic } from "lucide-react";
 import { useEffect, useState } from "react";
 
 type Mode = "loading" | "signin" | "setup" | "error";
@@ -64,19 +65,24 @@ export default function SignIn() {
   }
 
   return (
-    <main className="gate">
-      <h1>Listener</h1>
-      {mode === "loading" && <p className="muted">Loading…</p>}
-      {mode === "error" && <p className="error">Can&apos;t reach the server. Check the connection and reload.</p>}
+    <main className="mx-auto flex min-h-dvh max-w-sm flex-col justify-center gap-8 px-6 pt-safe pb-safe">
+      <div className="flex flex-col items-center gap-3 text-center">
+        <span className="grid size-16 place-items-center rounded-full border-[6px] border-accent bg-primary text-primary-foreground">
+          <Mic className="size-7" aria-hidden="true" />
+        </span>
+        <h1 className="text-2xl font-bold tracking-tight">Listener</h1>
+      </div>
+      {mode === "loading" && <p className="text-center text-muted-foreground">Loading…</p>}
+      {mode === "error" && <p className="text-center text-destructive">Can&apos;t reach the server. Check the connection and reload.</p>}
       {mode === "signin" && (
-        <div className="stack">
-          <button onClick={signIn} disabled={busy}>{busy ? "Waiting for Face ID…" : "Sign in with Face ID"}</button>
-        </div>
+        <button type="button" onClick={signIn} disabled={busy} className="min-h-12 rounded-xl bg-primary text-[15px] font-semibold text-primary-foreground disabled:opacity-50">
+          {busy ? "Waiting for Face ID…" : "Sign in with Face ID"}
+        </button>
       )}
       {mode === "setup" && (
-        <form onSubmit={setUp} className="stack">
-          <p className="muted">First time here. Enter your access code to set up Face ID sign in on this device.</p>
-          <label htmlFor="code">Access code</label>
+        <form onSubmit={setUp} className="flex flex-col gap-3">
+          <p className="text-[15px] text-muted-foreground">First time here. Enter your access code to set up Face ID sign in on this device.</p>
+          <label htmlFor="code" className="text-[13px] text-muted-foreground">Access code</label>
           <input
             id="code"
             type="password"
@@ -84,13 +90,14 @@ export default function SignIn() {
             value={code}
             onChange={(e) => setCode(e.target.value)}
             autoFocus
+            className="min-h-12 rounded-xl border bg-background px-3 text-base outline-none focus:ring-2 focus:ring-ring"
           />
-          <button type="submit" disabled={busy || code.length === 0}>
+          <button type="submit" disabled={busy || code.length === 0} className="min-h-12 rounded-xl bg-primary text-[15px] font-semibold text-primary-foreground disabled:opacity-50">
             {busy ? "Waiting for Face ID…" : "Set up Face ID"}
           </button>
         </form>
       )}
-      {message && <p className="error" role="alert">{message}</p>}
+      {message && <p className="text-center text-sm text-destructive" role="alert">{message}</p>}
     </main>
   );
 }

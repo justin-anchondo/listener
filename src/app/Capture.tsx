@@ -1,6 +1,12 @@
 "use client";
 
+import { AlertTriangle, ChevronDown, Mic } from "lucide-react";
+import { motion, useReducedMotion } from "motion/react";
+import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { ClientSheet, templateLabel, useClientSelection } from "@/components/app/client-sheet";
+import { PageHeader } from "@/components/app/page-header";
+import { RecorderBar } from "@/components/app/recorder-bar";
 import type { CaptureSettings } from "@/lib/config";
 import {
   CaptureSession,
@@ -11,25 +17,8 @@ import {
 import { describeCaptureError } from "@/lib/capture/errors";
 import { mergeEntries } from "@/lib/capture/merge";
 import { SegmentUploader, type UploadSegment, type UploaderState } from "@/lib/capture/uploader";
-import MeetingPicker, { type Selection } from "./MeetingPicker";
-
-const STATUS_LABEL: Record<CaptureStatus, string> = {
-  idle: "Ready",
-  starting: "Starting…",
-  live: "Recording",
-  reconnecting: "Reconnecting…",
-  stalled: "Mic stopped",
-  stopped: "Stopped",
-  error: "Stopped with an error",
-};
-
-function clock(totalSec: number): string {
-  const s = Math.max(0, Math.floor(totalSec));
-  const h = Math.floor(s / 3600);
-  const m = Math.floor((s % 3600) / 60);
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return h > 0 ? `${h}:${pad(m)}:${pad(s % 60)}` : `${pad(m)}:${pad(s % 60)}`;
-}
+import { clock, dueSummary, localIsoDate } from "@/lib/format";
+import { cn } from "@/lib/utils";
 
 type SaveState = "off" | "starting" | "saving" | "finishing" | "saved" | "failed";
 type SummaryState = { state: "idle" } | { state: "working" } | { state: "ready"; href: string } | { state: "failed"; message: string; href: string };
@@ -41,7 +30,20 @@ const SUMMARY_ERRORS: Record<string, string> = {
   rate_limited: "Too many requests. Open the meeting to retry.",
 };
 
+const SPEAKER_TINT = ["text-sky-700 dark:text-sky-300", "text-amber-700 dark:text-amber-300", "text-emerald-700 dark:text-emerald-300", "text-fuchsia-700 dark:text-fuchsia-300"];
+
+function Banner({ children, action }: { children: React.ReactNode; action?: React.ReactNode }) {
+  return (
+    <div role="alert" className="flex items-center gap-3 rounded-xl bg-destructive-soft px-4 py-3 text-[14px] text-destructive">
+      <AlertTriangle className="size-4 shrink-0" aria-hidden="true" />
+      <span className="flex-1">{children}</span>
+      {action}
+    </div>
+  );
+}
+
 export default function Capture({ settings }: { settings: CaptureSettings }) {
+  const reduced = useReducedMotion();
   const [status, setStatus] = useState<CaptureStatus>("idle");
   const [detail, setDetail] = useState<string | undefined>();
   const [entries, setEntries] = useState<TranscriptEntry[]>([]);
@@ -50,24 +52,38 @@ export default function Capture({ settings }: { settings: CaptureSettings }) {
   const [startedAt, setStartedAt] = useState<number | null>(null);
   const [now, setNow] = useState(Date.now());
   const [showDiag, setShowDiag] = useState(false);
-  const [selection, setSelection] = useState<Selection | null>(null);
   const [saveState, setSaveState] = useState<SaveState>("off");
   const [upload, setUpload] = useState<UploaderState | null>(null);
   const [meetingId, setMeetingId] = useState<string | null>(null);
   const [summary, setSummary] = useState<SummaryState>({ state: "idle" });
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const [due, setDue] = useState<{ overdue: number; week: number } | null>(null);
   const session = useRef<CaptureSession | null>(null);
   const uploader = useRef<SegmentUploader | null>(null);
   const early = useRef<Omit<UploadSegment, "seq">[]>([]); // segments heard before the meeting record exists
   const stopped = useRef(false);
+  const level = useRef(0);
   const bottom = useRef<HTMLDivElement>(null);
 
+  const { clients, selection, error: dirError, refresh, choose } = useClientSelection(settings.templates);
+
   const active = status === "starting" || status === "live" || status === "reconnecting" || status === "stalled";
+  const finishing = saveState === "finishing";
+  const busy = active || finishing;
 
   useEffect(() => {
     if (!active) return;
     const t = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(t);
   }, [active]);
+
+  useEffect(() => {
+    if (busy) document.body.dataset.recording = "1";
+    else delete document.body.dataset.recording;
+    return () => {
+      delete document.body.dataset.recording;
+    };
+  }, [busy]);
 
   useEffect(() => {
     if (saveState !== "saving") return;
@@ -81,6 +97,24 @@ export default function Capture({ settings }: { settings: CaptureSettings }) {
 
   useEffect(() => () => session.current?.stop(), []);
 
+  // Due this week for the selected client (open items view: action item fields only).
+  useEffect(() => {
+    if (!selection || busy) return;
+    let cancelled = false;
+    void fetch("/api/open-items", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : { items: [] }))
+      .then(({ items }: { items: { clientId: string; dueDate: string | null; snoozedUntil: string | null }[] }) => {
+        if (cancelled) return;
+        const mine = items.filter((i) => i.clientId === selection.clientId);
+        const s = dueSummary(mine, localIsoDate());
+        setDue({ overdue: s.overdue, week: s.week });
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [selection, busy]);
+
   const onEntry = useCallback((e: TranscriptEntry) => {
     setEntries((prev) => [...prev, e]);
     if (e.kind !== "segment") return;
@@ -90,14 +124,16 @@ export default function Capture({ settings }: { settings: CaptureSettings }) {
   }, []);
 
   function start() {
-    if (!selection) return;
+    if (!selection) return setSheetOpen(true);
     setEntries([]);
     setInterim(null);
     setDetail(undefined);
     setStartedAt(Date.now());
+    setNow(Date.now());
     setUpload(null);
     setMeetingId(null);
     setSummary({ state: "idle" });
+    setShowDiag(false);
     uploader.current = null;
     early.current = [];
     stopped.current = false;
@@ -111,23 +147,27 @@ export default function Capture({ settings }: { settings: CaptureSettings }) {
       onEntry,
       onInterim: setInterim,
       onDiagnostics: setDiag,
+      onLevel: (v) => {
+        level.current = v;
+      },
     });
     session.current = s;
     void s.start().catch(() => undefined); // status callback already carries the error
 
+    const sel = selection;
     setSaveState("starting");
-    void createMeeting(selection).then((meetingId) => {
-      if (!meetingId) {
+    void createMeeting(sel).then((id) => {
+      if (!id) {
         setSaveState("failed");
         return;
       }
       const u = new SegmentUploader({
-        clientId: selection.clientId,
-        meetingId,
+        clientId: sel.clientId,
+        meetingId: id,
         maxPerPost: settings.storage.max_segments_per_post,
         onState: setUpload,
       });
-      setMeetingId(meetingId);
+      setMeetingId(id);
       for (const seg of early.current) u.add(seg);
       early.current = [];
       uploader.current = u;
@@ -136,7 +176,7 @@ export default function Capture({ settings }: { settings: CaptureSettings }) {
         setSaveState("finishing");
         void u.finish().then((ok) => {
           setSaveState(ok ? "saved" : "failed");
-          if (ok) void summarize(selection.clientId, meetingId);
+          if (ok) void summarize(sel.clientId, id);
         });
       } else {
         setSaveState("saving");
@@ -180,126 +220,191 @@ export default function Capture({ settings }: { settings: CaptureSettings }) {
 
   const elapsed = startedAt ? (now - startedAt) / 1000 : 0;
   const lagWarn = diag?.medianLagMs != null && diag.medianLagMs > settings.capture.target_latency_ms;
-  const finishing = saveState === "finishing";
+  const saveText =
+    saveState === "starting" ? "Preparing to save…"
+    : saveState === "saving" ? (upload?.failing ? `Retrying · ${upload.pending} lines waiting` : "Saving as you go · audio is never stored")
+    : saveState === "finishing" ? "Saving the last lines…"
+    : saveState === "failed" ? "Some lines couldn't be saved" : "";
 
+  // ---------- Recording ----------
+  if (busy) {
+    return (
+      <div className="flex min-h-dvh flex-col">
+        <PageHeader meta={selection ? `${selection.clientName} · ${selection.projectName}` : undefined} />
+
+        <div className="flex flex-col gap-2 px-5 pt-2">
+          {status === "stalled" && (
+            <Banner action={<button type="button" onClick={resume} className="min-h-9 rounded-lg bg-destructive px-3 font-semibold text-white">Resume</button>}>
+              No audio for {settings.capture.stall_alert_seconds}s. iOS may have paused the mic.
+            </Banner>
+          )}
+          {status === "error" && (
+            <Banner action={detail !== "session" ? <button type="button" onClick={resume} className="min-h-9 rounded-lg bg-destructive px-3 font-semibold text-white">Resume</button> : undefined}>
+              {describeCaptureError(detail)}
+            </Banner>
+          )}
+          {upload?.unauthorized && <Banner>Your session expired, so new lines aren&apos;t saving. Sign in from another tab and they&apos;ll catch up.</Banner>}
+          {active && diag && diag.wakeLock !== "on" && (
+            <p className="rounded-xl bg-warning-soft px-4 py-2.5 text-[13px] text-warning">
+              The screen may lock. Set Auto-Lock to Never while docked.
+            </p>
+          )}
+          {showDiag && diag && (
+            <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 rounded-xl bg-surface px-4 py-3 text-[13px]">
+              <dt className="text-muted-foreground">Delay (median)</dt>
+              <dd className={cn("tabular-nums", lagWarn && "text-warning")}>{diag.medianLagMs ?? "–"} ms</dd>
+              <dt className="text-muted-foreground">Delay (last / max)</dt>
+              <dd className="tabular-nums">{diag.lastLagMs ?? "–"} / {diag.maxLagMs ?? "–"} ms</dd>
+              <dt className="text-muted-foreground">Reconnects</dt>
+              <dd>{diag.reconnects}</dd>
+              <dt className="text-muted-foreground">Audio</dt>
+              <dd>{diag.audioState}, {diag.inputSampleRate ?? "–"} Hz</dd>
+              <dt className="text-muted-foreground">Screen awake</dt>
+              <dd>{diag.wakeLock}</dd>
+              <dt className="text-muted-foreground">Saved / waiting</dt>
+              <dd className="tabular-nums">{upload ? `${upload.saved} / ${upload.pending}` : "–"}</dd>
+            </dl>
+          )}
+        </div>
+
+        <main aria-live="polite" className="flex flex-1 flex-col justify-end gap-4 px-5 pt-4 pb-40">
+          {entries.length === 0 && !interim && (
+            <p className="text-center text-[15px] text-muted-foreground">{finishing ? "Saving…" : "Listening…"}</p>
+          )}
+          {mergeEntries(entries, settings.capture.merge_gap_seconds).map((e) =>
+            e.kind === "gap" ? (
+              <p key={e.id} className="border-y border-dashed py-1 text-[13px] text-warning">
+                {clock(e.atSec)} · {e.seconds}s not captured ({e.reason === "stall" ? "mic paused" : "connection lost"})
+              </p>
+            ) : (
+              <motion.p
+                key={e.id}
+                initial={reduced ? false : { opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="text-[17px] leading-relaxed"
+              >
+                <span className={cn("mr-2 text-[13px] font-semibold", SPEAKER_TINT[(e.speaker ?? 0) % 4])}>
+                  {e.speaker === null ? "Speaker" : `Speaker ${e.speaker + 1}`}
+                </span>
+                {e.text}
+              </motion.p>
+            ),
+          )}
+          {interim && <p className="text-[17px] italic leading-relaxed text-muted-foreground">{interim}</p>}
+          <div ref={bottom} />
+        </main>
+
+        <div className="fixed inset-x-0 bottom-0 z-30 bg-gradient-to-t from-background via-background to-transparent px-4 pt-8 pb-safe">
+          <div className="mx-auto flex max-w-xl flex-col items-center gap-2">
+            <RecorderBar
+              elapsedSec={elapsed}
+              levelRef={level}
+              live={status === "live"}
+              stopping={finishing}
+              onStop={stop}
+              onInfo={() => setShowDiag((v) => !v)}
+            />
+            <p className="text-xs text-muted-foreground">{saveText}</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ---------- Ready ----------
   return (
-    <main className="capture">
-      <header className={`bar status-${status}`}>
-        <span className="dot" aria-hidden />
-        <span className="label">{STATUS_LABEL[status]}</span>
-        {startedAt && <span className="clock">{clock(elapsed)}</span>}
-        <button className="link" onClick={() => setShowDiag((v) => !v)} aria-expanded={showDiag}>
-          {showDiag ? "Hide details" : "Details"}
-        </button>
-      </header>
+    <>
+      <PageHeader />
+      <main className="flex flex-1 flex-col items-center justify-center gap-9 px-5 py-6">
+        {status === "error" && <div className="w-full"><Banner>{describeCaptureError(detail)}</Banner></div>}
+        {dirError && <div className="w-full"><Banner>{dirError}</Banner></div>}
 
-      {selection && (active || saveState !== "off") && (
-        <div className="context">
-          {selection.clientName} · {selection.projectName}
-          <SaveBadge state={saveState} upload={upload} />
-        </div>
-      )}
-
-      {status === "stalled" && (
-        <div className="alert" role="alert">
-          No audio for {settings.capture.stall_alert_seconds}s. iOS may have paused the mic.
-          <button onClick={resume}>Resume</button>
-        </div>
-      )}
-      {status === "error" && (
-        <div className="alert" role="alert">
-          <span>{describeCaptureError(detail)}</span>
-          {detail !== "session" && <button onClick={resume}>Resume</button>}
-        </div>
-      )}
-      {upload?.unauthorized && (
-        <div className="alert" role="alert">
-          <span>Your session expired, so new lines aren&apos;t being saved. Keep this page open, sign in from another tab, and they&apos;ll catch up.</span>
-        </div>
-      )}
-      {saveState === "failed" && !active && (
-        <div className="alert" role="alert">
-          <span>Some lines couldn&apos;t be saved. They&apos;re still shown below until you leave this page.</span>
-        </div>
-      )}
-      {active && diag?.wakeLock !== "on" && diag?.wakeLock !== undefined && (
-        <div className="notice">
-          Screen may lock. Set Settings › Display & Brightness › Auto-Lock to Never while docked.
-        </div>
-      )}
-
-      {showDiag && diag && (
-        <dl className="diag">
-          <dt>Delay (median)</dt>
-          <dd className={lagWarn ? "warn" : ""}>{diag.medianLagMs ?? "–"} ms</dd>
-          <dt>Delay (last / max)</dt>
-          <dd>{diag.lastLagMs ?? "–"} / {diag.maxLagMs ?? "–"} ms</dd>
-          <dt>Reconnects</dt>
-          <dd>{diag.reconnects}</dd>
-          <dt>Mic level</dt>
-          <dd><meter min={0} max={0.3} value={diag.level} /></dd>
-          <dt>Audio</dt>
-          <dd>{diag.audioState}, {diag.inputSampleRate ?? "–"} Hz</dd>
-          <dt>Screen awake</dt>
-          <dd>{diag.wakeLock}</dd>
-          <dt>Saved / waiting</dt>
-          <dd>{upload ? `${upload.saved} / ${upload.pending}` : "–"}</dd>
-        </dl>
-      )}
-
-      {summary.state !== "idle" && !active && (
-        <div className="summary-status" role="status">
-          {summary.state === "working" && <span>Summarizing the meeting… usually under a minute.</span>}
-          {summary.state === "ready" && <><span>Summary and action items ready.</span><a href={summary.href}>View</a></>}
-          {summary.state === "failed" && <><span className="error">{summary.message}</span><a href={summary.href}>Open meeting</a></>}
-        </div>
-      )}
-
-      {!active && !finishing && (
-        <>
-          <MeetingPicker templates={settings.templates} value={selection} onChange={setSelection} />
-          <nav className="nav-links">
-            {selection && <a href={`/p/${selection.clientId}/${selection.projectId}`}>Meetings for this project</a>}
-            <a href="/items">Open items</a>
-          </nav>
-        </>
-      )}
-
-      <section className="transcript" aria-live="polite">
-        {entries.length === 0 && !interim && (
-          <p className="empty">{active ? "Listening…" : selection ? "Tap Start when the call begins." : "Choose a client and project."}</p>
-        )}
-        {mergeEntries(entries, settings.capture.merge_gap_seconds).map((e) =>
-          e.kind === "gap" ? (
-            <p key={e.id} className="gap">
-              {clock(e.atSec)} · {e.seconds}s not captured ({e.reason === "stall" ? "mic paused" : "connection lost"})
-            </p>
-          ) : (
-            <p key={e.id} className={`seg speaker-${(e.speaker ?? 0) % 4}`}>
-              <span className="who">{e.speaker === null ? "Speaker" : `Speaker ${e.speaker + 1}`}</span>
-              <span className="at">{clock(e.atSec)}</span>
-              <span className="text">{e.text}</span>
-            </p>
-          ),
-        )}
-        {interim && <p className="interim">{interim}</p>}
-        <div ref={bottom} />
-      </section>
-
-      <footer className="controls">
-        {active ? (
-          <button className="stop" onClick={stop}>Stop</button>
-        ) : (
-          <button className="start" onClick={start} disabled={!selection || finishing}>
-            {finishing ? "Saving…" : "Start"}
+        <div className="flex flex-col items-center gap-3">
+          <p className="text-[13px] font-medium text-muted-foreground">Recording for</p>
+          <button
+            type="button"
+            onClick={() => setSheetOpen(true)}
+            disabled={!clients}
+            className="flex min-h-11 max-w-full items-center gap-2 rounded-full border px-4 text-[15px]"
+          >
+            {selection ? (
+              <>
+                <span className="truncate font-semibold">{selection.clientName}</span>
+                <span className="text-muted-foreground">/</span>
+                <span className="truncate">{selection.projectName}</span>
+              </>
+            ) : (
+              <span className="font-semibold">{clients ? (clients.length ? "Choose a project" : "Add your first client") : "Loading…"}</span>
+            )}
+            <ChevronDown className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
           </button>
+          {selection && settings.templates.length > 1 && (
+            <button type="button" onClick={() => setSheetOpen(true)} className="min-h-8 rounded-full bg-muted px-3 text-[13px] text-muted-foreground">
+              {templateLabel(selection.template)}
+            </button>
+          )}
+        </div>
+
+        <div className="flex flex-col items-center gap-4">
+          <motion.button
+            type="button"
+            onClick={start}
+            disabled={!clients}
+            aria-label="Start recording"
+            whileTap={reduced ? undefined : { scale: 0.94 }}
+            className="grid size-[148px] place-items-center rounded-full border-[10px] border-accent bg-primary text-primary-foreground shadow-[0_10px_30px_rgba(37,99,235,0.25)] disabled:opacity-50"
+          >
+            <Mic className="size-12" strokeWidth={1.8} aria-hidden="true" />
+          </motion.button>
+          <p className="text-[15px] font-semibold">{selection ? "Tap to start" : "Choose a project to start"}</p>
+        </div>
+
+        {summary.state !== "idle" ? (
+          <div role="status" className="flex w-full items-center gap-3 rounded-xl bg-surface px-4 py-3.5">
+            <span className="flex-1 text-[15px]">
+              {summary.state === "working" && "Summarizing the meeting… usually under a minute."}
+              {summary.state === "ready" && "Summary and action items are ready."}
+              {summary.state === "failed" && <span className="text-destructive">{summary.message}</span>}
+            </span>
+            {summary.state !== "working" && (
+              <Link href={summary.href} className="min-h-9 rounded-lg bg-primary px-3 py-2 text-[14px] font-semibold text-primary-foreground">
+                {summary.state === "ready" ? "View" : "Open"}
+              </Link>
+            )}
+          </div>
+        ) : (
+          selection && due && (due.week > 0 || due.overdue > 0) && (
+            <Link href="/items" className="flex w-full items-center gap-3 rounded-xl bg-surface px-4 py-3.5">
+              <span className="flex flex-1 flex-col gap-0.5">
+                <span className="text-xs text-muted-foreground">{selection.clientName} · action items</span>
+                <span className="text-[15px] font-semibold">
+                  {due.week > 0 ? `${due.week} due this week` : `${due.overdue} overdue`}
+                </span>
+              </span>
+              {due.week > 0 && due.overdue > 0 && (
+                <span className="rounded-full bg-destructive-soft px-2.5 py-1 text-xs font-semibold text-destructive">{due.overdue} overdue</span>
+              )}
+            </Link>
+          )
         )}
-      </footer>
-    </main>
+      </main>
+
+      {clients && (
+        <ClientSheet
+          open={sheetOpen}
+          onClose={() => setSheetOpen(false)}
+          clients={clients}
+          selection={selection}
+          templates={settings.templates}
+          onChoose={choose}
+          onRefresh={refresh}
+        />
+      )}
+    </>
   );
 }
 
-async function createMeeting(sel: Selection): Promise<string | null> {
+async function createMeeting(sel: { clientId: string; projectId: string; template: string }): Promise<string | null> {
   try {
     const res = await fetch(`/api/clients/${sel.clientId}/meetings`, {
       method: "POST",
@@ -311,17 +416,4 @@ async function createMeeting(sel: Selection): Promise<string | null> {
   } catch {
     return null;
   }
-}
-
-function SaveBadge({ state, upload }: { state: SaveState; upload: UploaderState | null }) {
-  const pending = upload?.pending ?? 0;
-  const text: Record<SaveState, string> = {
-    off: "",
-    starting: "Preparing to save…",
-    saving: upload?.failing ? `Retrying · ${pending} waiting` : "Saving",
-    finishing: "Saving last lines…",
-    saved: "Saved",
-    failed: "Not saved",
-  };
-  return <span className={`save save-${state}${upload?.failing ? " save-retry" : ""}`}>{text[state]}</span>;
 }
