@@ -40,8 +40,8 @@ export async function summarizeMeeting(
   meetingId: string,
   timeZone: string,
   generate: Generate = generateWithClaude,
-): Promise<{ summaryId: string; actionItems: number }> {
-  const ctx = await loadMeetingContext(clientId, meetingId);
+): Promise<{ summaryId: string; actionItems: number; briefUpdates: number }> {
+  const ctx = await loadMeetingContext(clientId, meetingId, config.assist.brief_amendments_in_prompt);
   if (ctx.segments.length === 0) throw new NothingToSummarizeError();
 
   const stats = talkStats(ctx.segments, ctx.speakerMap);
@@ -50,6 +50,7 @@ export async function summarizeMeeting(
     clientName: ctx.clientName,
     projectName: ctx.projectName,
     brief: ctx.brief,
+    amendments: ctx.amendments.map((a) => ({ date: localDate(a.date, timeZone).date, text: a.text })),
     template: ctx.template,
     watchFor: config.templates[ctx.template]?.watch_for ?? [],
     meetingDate: date,
@@ -73,8 +74,12 @@ export async function summarizeMeeting(
     maxItemChars: config.assist.max_item_chars,
     maxFreeTags: config.assist.max_free_form_tags,
     allowedTags: config.tags,
+    maxBriefUpdates: config.assist.max_brief_updates,
+    knownBriefTexts: ctx.knownAmendmentTexts,
   });
 
-  const summaryId = await saveGeneratedSummary(clientId, meetingId, model, { ...clean.content, stats }, clean.tags, clean.actionItems);
-  return { summaryId, actionItems: clean.actionItems.length };
+  const summaryId = await saveGeneratedSummary(
+    clientId, meetingId, model, { ...clean.content, stats }, clean.tags, clean.actionItems, clean.briefUpdates,
+  );
+  return { summaryId, actionItems: clean.actionItems.length, briefUpdates: clean.briefUpdates.length };
 }

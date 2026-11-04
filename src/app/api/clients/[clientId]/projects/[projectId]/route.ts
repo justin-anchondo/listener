@@ -1,5 +1,6 @@
 import { requireSession } from "@/lib/auth/session";
 import { loadConfig } from "@/lib/config";
+import { listAmendments } from "@/lib/db/amendments";
 import { type ProjectUpdate, getProjectBrief, updateProject } from "@/lib/db/directory";
 import { handle, json, readJson } from "@/lib/http";
 import { LimitError, cleanName, cleanText } from "@/lib/policy/limits";
@@ -19,7 +20,8 @@ export async function GET(_request: Request, ctx: Ctx) {
   return handle("projects.get", async () => {
     await requireSession();
     const { clientId, projectId } = await ids(ctx);
-    return json({ brief: await getProjectBrief(clientId, projectId) });
+    const [brief, amendments] = await Promise.all([getProjectBrief(clientId, projectId), listAmendments(clientId, projectId)]);
+    return json({ brief, amendments });
   });
 }
 

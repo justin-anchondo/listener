@@ -44,7 +44,7 @@ Then redeploy. Passkeys belong to one web address, so always use the stable one.
 
 ### 3b. Phase 3 additions
 
-1. In Supabase **SQL Editor › + New query**, paste all of `db/migrations/0002_summaries.sql` and run it.
+1. In Supabase **SQL Editor › + New query**, paste all of `db/migrations/0002_summaries.sql` and run it. Then do the same with `db/migrations/0003_brief_amendments.sql`.
 2. In Vercel, add `ANTHROPIC_API_KEY` (Secret) with an API key from console.anthropic.com, then redeploy.
 
 ### 4. First sign in
@@ -64,6 +64,8 @@ After **Stop**, the summary and action items are generated automatically (usuall
 - Tick action items done, edit their text, owner, or due date, or add your own.
 - Under **Speakers**, name the people on the call and pick which one is **Me**, then **Regenerate** for feedback on your own talk time.
 - **Edit summary** saves a new version. Earlier versions are kept.
+
+**Project brief:** open a project (Meetings tab) to write its brief. After each meeting, new lasting facts are added under **Updates** with the date and a link to the meeting. Your brief itself is never changed automatically. Dismiss an update with **×** (it stays in the history and can be restored), or add your own with **+ Note**.
 
 **Open items** lists everything still open: **All clients** groups by due date (overdue, today, next 7 days, later, no date, snoozed); **By client** groups by client with open and overdue counts. Each item has a due date chip (red overdue, amber due soon); tap it to pick a date. Tap an item to edit it, snooze it a week, or open its meeting.
 

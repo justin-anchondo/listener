@@ -20,6 +20,7 @@ const output = (over: Partial<MeetingOutputT> = {}): MeetingOutputT => ({
   feedback: { went_well: ["Clear agenda"], suggestions: ["Confirm owners"], not_covered: [], commitments_by_me: ["Proposal"], open_questions: [] },
   tags: ["pricing"],
   free_tags: ["launch"],
+  brief_updates: ["Budget is capped at $40k including migration."],
   ...over,
 });
 
@@ -149,5 +150,32 @@ describe("normalizeTitle", () => {
   it("ignores case and punctuation when matching items", () => {
     expect(normalizeTitle("Send the proposal!")).toBe(normalizeTitle("send THE proposal"));
     expect(normalizeTitle("Send proposal")).not.toBe(normalizeTitle("Send revised proposal"));
+  });
+});
+
+describe("brief updates", () => {
+  it("keeps new facts, drops known and duplicate ones, and caps the count", () => {
+    const r = cleanOutput(
+      output({ brief_updates: ["Launch moved to July.", "Budget is $40k!", "launch moved to july", "Dana owns design.", " ", "Extra one."] }),
+      [0],
+      { ...limits, maxBriefUpdates: 2, knownBriefTexts: ["budget is $40k"] },
+    );
+    expect(r.briefUpdates).toEqual(["Launch moved to July.", "Dana owns design."]);
+  });
+
+  it("returns none when the limit is zero or unset", () => {
+    expect(cleanOutput(output(), [0], limits).briefUpdates).toEqual([]);
+  });
+
+  it("puts amendments in the prompt and asks for brief updates", () => {
+    const p = buildPostMeetingPrompt({
+      clientName: "Acme", projectName: "Web", brief: "Original goals", template: "general", watchFor: [],
+      meetingDate: "2026-11-04", weekday: "Wednesday", segments: [seg(0, 0, 1000, "Hi")], speakerMap: {},
+      allowedTags: [], stats: talkStats([], {}), mergeGapMs: 8000,
+      amendments: [{ date: "2026-10-28", text: "Dana is the design approver." }],
+    });
+    expect(p.user).toContain("<project_brief>\nOriginal goals\n</project_brief>");
+    expect(p.user).toContain("- 2026-10-28: Dana is the design approver.");
+    expect(SYSTEM_PROMPT).toMatch(/Brief updates/);
   });
 });

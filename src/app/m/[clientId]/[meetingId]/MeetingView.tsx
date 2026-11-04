@@ -1,6 +1,7 @@
 "use client";
 
 import { Plus } from "lucide-react";
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { type ItemPatch, ItemRow, ItemSheet, type SheetItem } from "@/components/app/items";
 import { PageHeader } from "@/components/app/page-header";
@@ -45,6 +46,7 @@ type Data = {
   transcript: { speaker: number | null; startMs: number; text: string }[];
   summary: Summary | null;
   items: Item[];
+  briefUpdates: { id: string; text: string; dismissed: boolean }[];
 };
 
 type Tab = "summary" | "actions" | "feedback" | "transcript";
@@ -206,6 +208,29 @@ export default function MeetingView({ clientId, meetingId, allowedTags }: { clie
             )}
             {s.decisions.length > 0 && <Section title="Decisions"><Bullets items={s.decisions} /></Section>}
             {s.main_points.length > 0 && <Section title="Main points"><Bullets items={s.main_points} /></Section>}
+            {data.briefUpdates.length > 0 && (
+              <Section title="Added to project brief">
+                <ul className="flex flex-col gap-2">
+                  {data.briefUpdates.map((u) => (
+                    <li key={u.id} className="flex items-start gap-2">
+                      <span className={cn("flex-1 text-[15px] leading-relaxed", u.dismissed && "text-muted-foreground line-through")}>{u.text}</span>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          setData((d) => d && { ...d, briefUpdates: d.briefUpdates.map((x) => (x.id === u.id ? { ...x, dismissed: !u.dismissed } : x)) });
+                          const res = await sendJson(`/api/clients/${clientId}/amendments/${u.id}`, "PATCH", { dismissed: !u.dismissed });
+                          if (!res.ok) { setError("Couldn't update that."); await load(); }
+                        }}
+                        className="min-h-9 shrink-0 text-[13px] text-link"
+                      >
+                        {u.dismissed ? "Restore" : "Dismiss"}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+                <Link href={`/p/${clientId}/${meeting.projectId}`} className="text-[13px] text-link">See the full brief</Link>
+              </Section>
+            )}
             {s.key_quotes.length > 0 && (
               <Section title="Key quotes">
                 {s.key_quotes.map((q, i) => (

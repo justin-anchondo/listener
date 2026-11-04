@@ -64,6 +64,8 @@ const configSchema = z.object({
     max_list_items: z.number().int().positive(),
     max_item_chars: z.number().int().positive(),
     transcript_merge_gap_seconds: z.number().nonnegative(),
+    max_brief_updates: z.number().int().nonnegative(),
+    brief_amendments_in_prompt: z.number().int().nonnegative(),
     max_free_form_tags: z.number().int().nonnegative(),
   }),
   recall: z.object({

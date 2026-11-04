@@ -35,7 +35,7 @@ describe.skipIf(!run)("database isolation", () => {
   });
 
   beforeEach(async () => {
-    await admin`truncate clients, projects, meetings, transcript_segments, passkeys, audit_log, summaries, action_items cascade`;
+    await admin`truncate clients, projects, meetings, transcript_segments, passkeys, audit_log, summaries, action_items, brief_amendments cascade`;
   });
 
   it("round trips a client, project, meeting, and transcript", async () => {
@@ -234,6 +234,7 @@ describe.skipIf(!run)("summaries and action items", () => {
     feedback: { went_well: ["Clear"], suggestions: ["Confirm dates"], not_covered: [], commitments_by_me: ["Proposal"], open_questions: [] },
     tags: ["pricing", "bogus"],
     free_tags: ["launch"],
+    brief_updates: ["Budget is forty thousand including migration.", "Launch targets July."],
   };
 
   beforeAll(async () => {
@@ -250,7 +251,7 @@ describe.skipIf(!run)("summaries and action items", () => {
   });
 
   beforeEach(async () => {
-    await admin`truncate clients, projects, meetings, transcript_segments, passkeys, audit_log, summaries, action_items cascade`;
+    await admin`truncate clients, projects, meetings, transcript_segments, passkeys, audit_log, summaries, action_items, brief_amendments cascade`;
   });
 
   async function meetingWithTranscript(name: string) {
@@ -374,6 +375,71 @@ describe.skipIf(!run)("summaries and action items", () => {
     await deleteClient(c);
     const [counts] = await admin`select (select count(*)::int from summaries) s, (select count(*)::int from action_items) i`;
     expect(counts).toEqual({ s: 0, i: 0 });
+  });
+
+  it("adds brief amendments from the meeting without touching the original brief", async () => {
+    const { c, p, m } = await meetingWithTranscript("Acme");
+    await updateProject(c, p, { brief: "Original brief." });
+    await summarize(c, m);
+    const { listAmendments } = await import("@/lib/db/amendments");
+    const list = await listAmendments(c, p);
+    expect(list.map((a) => [a.text, a.source, a.meetingId === m, a.meetingTitle])).toEqual([
+      ["Budget is forty thousand including migration.", "meeting", true, "Kickoff call"],
+      ["Launch targets July.", "meeting", true, "Kickoff call"],
+    ]);
+    expect(await getProjectBrief(c, p)).toBe("Original brief.");
+    const dump = JSON.stringify(await admin`select * from brief_amendments`);
+    expect(dump).not.toMatch(/forty|July/);
+  });
+
+  it("feeds earlier amendments to the next meeting and skips known facts", async () => {
+    const { c, p, m } = await meetingWithTranscript("Acme");
+    await summarize(c, m);
+    const m2 = await startMeeting(c, p, "general");
+    await saveSegments(c, m2, [seg(0, 0, "Quick sync.")], 30);
+    prompts.length = 0;
+    await summarize(c, m2);
+    expect(prompts[0]).toMatch(/<brief_amendments>[\s\S]*Launch targets July\.[\s\S]*<\/brief_amendments>/);
+    const { listAmendments } = await import("@/lib/db/amendments");
+    // The fake model repeats the same two facts; they're already known, so nothing new is added.
+    expect((await listAmendments(c, p)).filter((a) => a.meetingId === m2)).toHaveLength(0);
+  });
+
+  it("regenerating replaces a meeting's amendments but keeps dismissed ones dismissed", async () => {
+    const { c, p, m } = await meetingWithTranscript("Acme");
+    await summarize(c, m);
+    const { listAmendments, setAmendmentDismissed } = await import("@/lib/db/amendments");
+    const [first] = await listAmendments(c, p);
+    await setAmendmentDismissed(c, first.id, true);
+    await summarize(c, m);
+    const after = await listAmendments(c, p);
+    expect(after.map((a) => `${a.text}|${a.dismissed}`).sort()).toEqual([
+      "Budget is forty thousand including migration.|true",
+      "Launch targets July.|false",
+    ]);
+  });
+
+  it("owner notes are added, and amendment text can never be edited", async () => {
+    const { c, p } = await meetingWithTranscript("Acme");
+    const { addOwnerNote, listAmendments, setAmendmentDismissed } = await import("@/lib/db/amendments");
+    const id = await addOwnerNote(c, p, "Legal must review the privacy page.");
+    await setAmendmentDismissed(c, id, true);
+    await setAmendmentDismissed(c, id, false);
+    expect((await listAmendments(c, p)).map((a) => [a.text, a.source, a.dismissed])).toEqual([
+      ["Legal must review the privacy page.", "owner", false],
+    ]);
+    await expect(withClient(c, (tx) => tx`update brief_amendments set text_enc = 'x'`)).rejects.toThrow(/permission denied/);
+    await expect(withClient(c, (tx) => tx`update brief_amendments set source = 'meeting'`)).rejects.toThrow(/permission denied/);
+  });
+
+  it("isolates amendments between clients", async () => {
+    const a = await meetingWithTranscript("A");
+    const b = await meetingWithTranscript("B");
+    await summarize(b.c, b.m);
+    const { listAmendments, setAmendmentDismissed } = await import("@/lib/db/amendments");
+    expect(await listAmendments(a.c, b.p)).toEqual([]);
+    const [amend] = await listAmendments(b.c, b.p);
+    await expect(setAmendmentDismissed(a.c, amend.id, true)).rejects.toThrow(/not found/);
   });
 
   it("refuses to summarize an empty meeting", async () => {

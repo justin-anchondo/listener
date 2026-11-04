@@ -74,6 +74,7 @@ Encrypted columns end in `_enc` and hold `nonce || ciphertext || tag`, base64.
 | suggestion_cards | id, client_id, meeting_id, kind, body_enc, pinned, expires_at | With transcript unless pinned |
 | summaries | id, client_id, meeting_id, version, source, model, content_enc (summary, decisions, quotes, feedback, talk stats as one encrypted JSON), tags, created_at. Append only: the app role can't update or delete | Until deleted |
 | action_items | id, client_id, project_id, meeting_id, title_enc, owner_enc, due_date, status, snoozed_until, source_quote_enc, source_ms, edited, created_at, closed_at | Until deleted |
+| brief_amendments | id, client_id, project_id, meeting_id, source (meeting or owner), text_enc, created_at, dismissed_at. The app role can insert and change only dismissed_at | Until deleted |
 | passkeys | id, public_key, counter, transports, created_at, last_used_at | Until removed |
 | audit_log | id, at, event, client_id, object_id, count | 365 days (config) |
 

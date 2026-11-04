@@ -38,6 +38,9 @@ export const MeetingOutput = z.object({
   feedback: FeedbackOut,
   tags: z.array(z.string()).describe("Only values from the allowed tag list"),
   free_tags: z.array(z.string()).describe("Up to three extra short topic tags"),
+  brief_updates: z
+    .array(z.string())
+    .describe("New lasting facts about the project to add to its brief; empty if nothing new"),
 });
 
 export type MeetingOutputT = z.infer<typeof MeetingOutput>;
@@ -69,7 +72,14 @@ export type CleanLimits = {
   maxItemChars: number;
   maxFreeTags: number;
   allowedTags: string[];
+  maxBriefUpdates?: number;
+  /** Amendment texts already on the project (active or dismissed); repeats are dropped. */
+  knownBriefTexts?: string[];
 };
+
+export function normalizeText(text: string): string {
+  return text.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -98,7 +108,7 @@ export function cleanOutput(
   out: MeetingOutputT,
   lineMs: number[],
   l: CleanLimits,
-): { content: SummaryContentT; tags: string[]; actionItems: CleanActionItem[] } {
+): { content: SummaryContentT; tags: string[]; actionItems: CleanActionItem[]; briefUpdates: string[] } {
   const msFor = (line: number) => (Number.isInteger(line) && line >= 0 && line < lineMs.length ? lineMs[line] : null);
   const allowed = new Set(l.allowedTags);
   const tags = [...new Set(out.tags.map((t) => t.trim().toLowerCase()).filter((t) => allowed.has(t)))];
@@ -140,5 +150,15 @@ export function cleanOutput(
     .filter((a) => a.title !== "")
     .slice(0, l.maxListItems);
 
-  return { content, tags, actionItems };
+  const known = new Set((l.knownBriefTexts ?? []).map(normalizeText));
+  const briefUpdates: string[] = [];
+  for (const raw of out.brief_updates ?? []) {
+    const text = clip(raw, l.maxItemChars);
+    const key = normalizeText(text);
+    if (!key || known.has(key)) continue;
+    known.add(key);
+    briefUpdates.push(text);
+  }
+
+  return { content, tags, actionItems, briefUpdates: briefUpdates.slice(0, l.maxBriefUpdates ?? 0) };
 }

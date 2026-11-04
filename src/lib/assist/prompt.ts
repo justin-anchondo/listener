@@ -7,6 +7,8 @@ export type PromptInput = {
   clientName: string;
   projectName: string;
   brief: string | null;
+  /** Active amendments to the brief, oldest first: date (YYYY-MM-DD) and text. */
+  amendments?: { date: string; text: string }[];
   template: string;
   watchFor: string[];
   meetingDate: string; // YYYY-MM-DD in the owner's time zone
@@ -31,6 +33,8 @@ Action items: include every commitment or follow up anyone made, including small
 Feedback: be specific and constructive. Base it on what happened, the project brief, and the talk time numbers provided. If the owner's speaker label is unknown, don't guess who they are; give feedback about the meeting as a whole.
 
 Tags: choose only from the allowed list. Put other topics in free_tags.
+
+Brief updates: list new lasting facts about the project that someone reading the brief later should know, such as decisions, scope or timeline changes, budget, stakeholders and their roles, constraints, and risks. Write each as one standalone sentence with the meeting date where timing matters. Leave out anything already in the brief or its amendments, one off logistics, and action items. Return an empty list when nothing new came up.
 
 Line numbers refer to the [Ln] markers in the transcript.`;
 
@@ -76,6 +80,10 @@ export function buildPostMeetingPrompt(p: PromptInput): BuiltPrompt {
     "<project_brief>",
     p.brief?.trim() || "(none written)",
     "</project_brief>",
+    "",
+    "<brief_amendments>",
+    p.amendments?.length ? p.amendments.map((a) => `- ${a.date}: ${a.text}`).join("\n") : "(none yet)",
+    "</brief_amendments>",
     "",
     "<talk_time>",
     talk || "(no speech captured)",

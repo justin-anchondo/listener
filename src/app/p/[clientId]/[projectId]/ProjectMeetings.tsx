@@ -3,6 +3,7 @@
 import { ChevronRight } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { BriefPanel } from "@/components/app/brief";
 import { PageHeader } from "@/components/app/page-header";
 import { loadDirectory } from "@/lib/client/directory";
 import { fmtDateTime, minutesBetween } from "@/lib/format";
@@ -40,6 +41,8 @@ export default function ProjectMeetings({ clientId, projectId }: { clientId: str
     <>
       <PageHeader back={{ href: "/meetings", label: names?.client ?? "Meetings" }} title={names?.project ?? " "} />
       <main className="flex flex-col px-5 pt-4">
+        <BriefPanel clientId={clientId} projectId={projectId} />
+        <h2 className="mt-6 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Meetings</h2>
         {error && <p className="text-sm text-destructive" role="alert">{error}</p>}
         {!meetings && !error && <p className="text-sm text-muted-foreground">Loading…</p>}
         {meetings?.length === 0 && <p className="text-[15px] text-muted-foreground">No meetings recorded for this project yet.</p>}

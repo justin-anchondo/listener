@@ -98,6 +98,14 @@ Generated when the owner taps End, in this order:
 
 Outputs are saved as soon as they are generated, and the owner can edit them at any time. Each edit or regeneration is saved as a new version; earlier versions are kept. Regenerating keeps action items the owner has completed or edited.
 
+### 4.4 Project brief and amendments
+
+- Each project has a brief written by the owner: goals, stakeholders, sensitivities, open questions. Summaries and the live assistant read it.
+- After each meeting the model proposes brief updates: new lasting facts such as decisions, scope or timeline changes, budget, stakeholders, constraints, and risks. They are saved as dated amendments linked to the meeting. Facts already in the brief or its amendments, or previously dismissed, are not added again.
+- The original brief is never changed automatically. Only the owner edits it.
+- The owner can add notes as amendments, and dismiss or restore any amendment. Amendment text can't be edited, so the history stays intact. Regenerating a meeting's summary replaces that meeting's amendments except ones the owner dismissed.
+- Prompts receive the brief plus the most recent active amendments (config `assist.brief_amendments_in_prompt`).
+
 ## 5. Data Retention
 
 | Data | Retention | Notes |
@@ -106,7 +114,7 @@ Outputs are saved as soon as they are generated, and the owner can edit them at 
 | Transcript segments | 30 days from meeting end (config) | Hard deleted by a scheduled purge job |
 | Summaries, key quotes, feedback, tags | Kept until the owner deletes them | Encrypted |
 | Action items | Kept until the owner deletes them | Encrypted text, plaintext status and dates |
-| Project briefs | Kept until the owner deletes them | Encrypted |
+| Project briefs and amendments | Kept until the owner deletes them | Encrypted; amendment text is write once |
 | Live suggestion cards | Deleted with the transcript, except pinned cards | Pinned cards follow the summary |
 | Audit log | 365 days (config) | Ids and event types only, no content |
 

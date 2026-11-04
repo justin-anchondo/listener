@@ -1,4 +1,5 @@
 import { requireSession } from "@/lib/auth/session";
+import { listAmendments } from "@/lib/db/amendments";
 import { loadMeetingContext, getMeetingMeta, latestSummary, listMeetingItems } from "@/lib/db/summaries";
 import { handle, json } from "@/lib/http";
 import { routeIds } from "@/lib/routeIds";
@@ -18,6 +19,7 @@ export async function GET(_request: Request, ctx: Ctx) {
       latestSummary(clientId, meetingId),
       listMeetingItems(clientId, meetingId),
     ]);
+    const briefUpdates = (await listAmendments(clientId, context.projectId)).filter((a) => a.meetingId === meetingId);
     const speakers = [...new Set(context.segments.map((s) => s.speaker).filter((s): s is number => s !== null))].sort((a, b) => a - b);
     return json({
       meeting: {
@@ -34,6 +36,7 @@ export async function GET(_request: Request, ctx: Ctx) {
       transcript: context.segments,
       summary,
       items,
+      briefUpdates: briefUpdates.map((a) => ({ id: a.id, text: a.text, dismissed: a.dismissed })),
     });
   });
 }

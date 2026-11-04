@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { SummaryContent, type CleanActionItem, type SummaryContentT } from "@/lib/assist/schema";
+import { SummaryContent, normalizeText, type CleanActionItem, type SummaryContentT } from "@/lib/assist/schema";
 import type { SpeakerMap, StatSegment, TalkStats } from "@/lib/assist/stats";
 import { decryptField, encryptField } from "@/lib/crypto/keys";
 import { audit } from "@/lib/db/audit";
@@ -15,6 +15,7 @@ const PROJECT_BRIEF = "projects.brief";
 const ITEM_TITLE = "action_items.title";
 const ITEM_OWNER = "action_items.owner";
 const ITEM_QUOTE = "action_items.source_quote";
+export const AMENDMENT_TEXT = "brief_amendments.text";
 
 export type StoredSummary = {
   id: string;
@@ -51,6 +52,10 @@ export type MeetingContext = {
   endedAt: Date | null;
   speakerMap: SpeakerMap;
   segments: StatSegment[];
+  /** Active amendments from other meetings and owner notes, oldest first, capped. */
+  amendments: { date: Date; text: string }[];
+  /** Every amendment text on the project (active or dismissed), so the model's repeats can be dropped. */
+  knownAmendmentTexts: string[];
 };
 
 type ItemRow = {
@@ -86,14 +91,12 @@ function decryptItem(dek: Buffer, clientId: string, r: ItemRow): ActionItem {
   };
 }
 
-export function normalizeTitle(title: string): string {
-  return title.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
-}
+export const normalizeTitle = normalizeText;
 
 const ITEM_COLUMNS = "id, meeting_id, project_id, title_enc, owner_enc, to_char(due_date, 'YYYY-MM-DD') as due_date, status, to_char(snoozed_until, 'YYYY-MM-DD') as snoozed_until, source_quote_enc, source_ms, edited, created_at";
 
 /** Everything the post meeting prompt needs, decrypted, for one client. */
-export async function loadMeetingContext(clientId: string, meetingId: string): Promise<MeetingContext> {
+export async function loadMeetingContext(clientId: string, meetingId: string, amendmentLimit = 40): Promise<MeetingContext> {
   const segments = await loadTranscript(clientId, meetingId);
   return withClient(clientId, async (tx, id) => {
     const rows = await tx<{
@@ -107,7 +110,19 @@ export async function loadMeetingContext(clientId: string, meetingId: string): P
     if (rows.length === 0) throw new NotFoundError("meeting");
     const r = rows[0];
     const dek = await clientKey(tx, id);
+    // This meeting's own amendments are left out: a regenerate replaces them.
+    const amendRows = await tx<{ id: string; text_enc: string; created_at: Date; dismissed_at: Date | null; meeting_id: string | null }[]>`
+      select id, text_enc, created_at, dismissed_at, meeting_id from brief_amendments
+      where project_id = ${r.project_id} order by created_at`;
+    const decrypted = amendRows.map((a) => ({
+      ...a,
+      text: decryptField(dek, { clientId: id, column: AMENDMENT_TEXT, rowId: a.id }, a.text_enc),
+    }));
+    const others = decrypted.filter((a) => a.meeting_id !== meetingId);
+    const active = others.filter((a) => !a.dismissed_at);
     return {
+      amendments: active.slice(Math.max(0, active.length - amendmentLimit)).map((a) => ({ date: a.created_at, text: a.text })),
+      knownAmendmentTexts: [...others.map((a) => a.text), ...decrypted.filter((a) => a.meeting_id === meetingId && a.dismissed_at).map((a) => a.text)],
       clientName: decryptField(dek, { clientId: id, column: CLIENT_NAME, rowId: id }, r.client_name),
       projectId: r.project_id,
       projectName: decryptField(dek, { clientId: id, column: PROJECT_NAME, rowId: r.project_id }, r.project_name),
@@ -159,6 +174,7 @@ async function insertItem(tx: Tx, dek: Buffer, clientId: string, projectId: stri
 export async function saveGeneratedSummary(
   clientId: string, meetingId: string, model: string,
   content: StoredSummary["content"], tags: string[], items: CleanActionItem[],
+  briefUpdates: string[] = [],
 ): Promise<string> {
   return withClient(clientId, async (tx, id) => {
     const [meeting] = await tx<{ project_id: string }[]>`select project_id from meetings where id = ${meetingId}`;
@@ -171,6 +187,14 @@ export async function saveGeneratedSummary(
     const keptTitles = new Set(kept.map((k) => normalizeTitle(decryptField(dek, { clientId: id, column: ITEM_TITLE, rowId: k.id }, k.title_enc))));
     const fresh = items.filter((a) => !keptTitles.has(normalizeTitle(a.title)));
     for (const a of fresh) await insertItem(tx, dek, id, meeting.project_id, meetingId, a, false);
+    // Brief amendments from this meeting: replace the ones the owner hasn't dismissed.
+    await tx`delete from brief_amendments where meeting_id = ${meetingId} and dismissed_at is null`;
+    for (const text of briefUpdates) {
+      const amendId = randomUUID();
+      const enc = encryptField(dek, { clientId: id, column: AMENDMENT_TEXT, rowId: amendId }, text);
+      await tx`insert into brief_amendments (id, client_id, project_id, meeting_id, source, text_enc)
+        values (${amendId}, ${id}, ${meeting.project_id}, ${meetingId}, 'meeting', ${enc})`;
+    }
     await audit(tx, "summary.generated", { clientId: id, objectId: meetingId, count: fresh.length });
     return summaryId;
   });
