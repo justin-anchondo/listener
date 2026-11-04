@@ -35,7 +35,7 @@ describe.skipIf(!run)("database isolation", () => {
   });
 
   beforeEach(async () => {
-    await admin`truncate clients, projects, meetings, transcript_segments, passkeys, audit_log cascade`;
+    await admin`truncate clients, projects, meetings, transcript_segments, passkeys, audit_log, summaries, action_items cascade`;
   });
 
   it("round trips a client, project, meeting, and transcript", async () => {
@@ -212,5 +212,173 @@ describe.skipIf(!run)("hosted provider roles", () => {
     } finally {
       await admin.end();
     }
+  });
+});
+
+describe.skipIf(!run)("summaries and action items", () => {
+  let app: postgres.Sql;
+  let admin: postgres.Sql;
+  const seg = (seq: number, speaker: number, text: string) => ({ seq, speaker, startMs: seq * 5000, endMs: seq * 5000 + 4000, text });
+
+  const fakeOutput = {
+    title: "Kickoff call",
+    purpose: "Plan launch",
+    summary: "Agreed scope and budget.",
+    main_points: ["Scope agreed"],
+    decisions: ["Launch in July"],
+    action_items: [
+      { title: "Send proposal", owner: "me" as const, owner_name: null, due_date: "2026-11-06", source_line: 1, source_quote: "I'll send the proposal Friday" },
+      { title: "Share brand assets", owner: "them" as const, owner_name: "Dana", due_date: null, source_line: 0, source_quote: "We'll share assets" },
+    ],
+    key_quotes: [{ quote: "Budget is forty thousand", speaker: "Dana", source_line: 0 }],
+    feedback: { went_well: ["Clear"], suggestions: ["Confirm dates"], not_covered: [], commitments_by_me: ["Proposal"], open_questions: [] },
+    tags: ["pricing", "bogus"],
+    free_tags: ["launch"],
+  };
+
+  beforeAll(async () => {
+    process.env.LISTENER_MASTER_KEY = randomBytes(32).toString("base64");
+    app = postgres(appUrl!, { prepare: false, max: 2 });
+    admin = postgres(adminUrl!, { max: 1, onnotice: () => undefined, connection: { search_path: "listener" } });
+    setDbForTests(app);
+  });
+
+  afterAll(async () => {
+    setDbForTests(undefined);
+    await app.end();
+    await admin.end();
+  });
+
+  beforeEach(async () => {
+    await admin`truncate clients, projects, meetings, transcript_segments, passkeys, audit_log, summaries, action_items cascade`;
+  });
+
+  async function meetingWithTranscript(name: string) {
+    const c = await createClient(name);
+    const p = await createProject(c, `${name} project`);
+    const m = await startMeeting(c, p, "general");
+    await saveSegments(c, m, [seg(0, 1, "Budget is forty thousand. We'll share assets."), seg(1, 0, "I'll send the proposal Friday.")], 30);
+    await endMeeting(c, m, 30);
+    return { c, p, m };
+  }
+
+  async function summarize(c: string, m: string, gen = fakeGenerate) {
+    const { loadConfig } = await import("@/lib/config");
+    const { summarizeMeeting } = await import("@/lib/assist/post");
+    return summarizeMeeting(loadConfig(), c, m, "America/Los_Angeles", gen);
+  }
+
+  const prompts: string[] = [];
+  const fakeGenerate = async (prompt: { user: string }) => {
+    prompts.push(prompt.user);
+    return { output: fakeOutput, model: "fake-model" };
+  };
+
+  it("generates, encrypts, and reads back a summary with action items", async () => {
+    const { c, m } = await meetingWithTranscript("Acme");
+    const r = await summarize(c, m);
+    expect(r.actionItems).toBe(2);
+    const { latestSummary, listMeetingItems } = await import("@/lib/db/summaries");
+    const s = await latestSummary(c, m);
+    expect(s?.content.title).toBe("Kickoff call");
+    expect(s?.tags).toEqual(["pricing"]);
+    expect(s?.content.stats?.speakers.length).toBe(2);
+    const items = await listMeetingItems(c, m);
+    expect(items.map((i) => [i.title, i.owner, i.dueDate, i.sourceMs])).toEqual([
+      ["Send proposal", "Me", "2026-11-06", 5000],
+      ["Share brand assets", "Dana", null, 0],
+    ]);
+    const dump = JSON.stringify(await admin`select (select json_agg(s) from summaries s) a, (select json_agg(i) from action_items i) b`);
+    expect(dump).not.toMatch(/Kickoff|proposal|forty|Dana/i);
+  });
+
+  it("sends the model only the meeting's own client", async () => {
+    const a = await meetingWithTranscript("Acme");
+    await meetingWithTranscript("Beta Secret LLC");
+    prompts.length = 0;
+    await summarize(a.c, a.m);
+    expect(prompts[0]).toContain("Client: Acme");
+    expect(prompts[0]).not.toMatch(/Beta Secret/);
+  });
+
+  it("keeps versions append only and preserves edited items on regenerate", async () => {
+    const { c, m } = await meetingWithTranscript("Acme");
+    await summarize(c, m);
+    const { listMeetingItems, updateActionItem, saveEditedSummary, latestSummary } = await import("@/lib/db/summaries");
+    const [first, second] = await listMeetingItems(c, m);
+    await updateActionItem(c, first.id, { title: "Send revised proposal" });
+    await updateActionItem(c, second.id, { status: "done" });
+    await summarize(c, m);
+    const items = await listMeetingItems(c, m);
+    // Edited and done items are kept; the done one isn't recreated; "Send proposal" is new
+    // because the owner renamed the original.
+    expect(items.map((i) => `${i.title}|${i.status}`).sort()).toEqual([
+      "Send proposal|open",
+      "Send revised proposal|open",
+      "Share brand assets|done",
+    ]);
+    expect(items.filter((i) => i.title === "Send revised proposal")).toHaveLength(1);
+    expect(items.filter((i) => i.status === "done")).toHaveLength(1);
+    const latest = (await latestSummary(c, m))!;
+    await saveEditedSummary(c, m, { ...latest.content, title: "Edited title" }, ["timeline"]);
+    const versions = await admin`select version, source from summaries order by version`;
+    expect(versions.map((v) => `${v.version}:${v.source}`)).toEqual(["1:model", "2:model", "3:edit"]);
+    expect((await latestSummary(c, m))?.content.stats).toBeDefined();
+  });
+
+  it("app role cannot rewrite or delete summary history", async () => {
+    const { c, m } = await meetingWithTranscript("Acme");
+    await summarize(c, m);
+    await expect(withClient(c, (tx) => tx`update summaries set version = 9`)).rejects.toThrow(/permission denied/);
+    await expect(withClient(c, (tx) => tx`delete from summaries`)).rejects.toThrow(/permission denied/);
+  });
+
+  it("isolates summaries and items between clients", async () => {
+    const a = await meetingWithTranscript("A");
+    const b = await meetingWithTranscript("B");
+    await summarize(b.c, b.m);
+    const { latestSummary, listMeetingItems, updateActionItem } = await import("@/lib/db/summaries");
+    expect(await latestSummary(a.c, b.m)).toBeNull();
+    expect(await listMeetingItems(a.c, b.m)).toEqual([]);
+    const [itemB] = await listMeetingItems(b.c, b.m);
+    await expect(updateActionItem(a.c, itemB.id, { status: "done" })).rejects.toThrow(/not found/);
+  });
+
+  it("lists open items across clients, and that scope reads nothing else", async () => {
+    const a = await meetingWithTranscript("Acme");
+    const b = await meetingWithTranscript("Beta");
+    await summarize(a.c, a.m);
+    await summarize(b.c, b.m);
+    const { listOpenItems } = await import("@/lib/db/openItems");
+    const { listMeetingItems, updateActionItem } = await import("@/lib/db/summaries");
+    const [done] = await listMeetingItems(a.c, a.m);
+    await updateActionItem(a.c, done.id, { status: "done" });
+    const open = await listOpenItems();
+    expect(open).toHaveLength(3);
+    expect(new Set(open.map((o) => o.clientName))).toEqual(new Set(["Acme", "Beta"]));
+    expect(open[0].dueDate).toBe("2026-11-06"); // dated items first
+    const leaked = await app.begin(async (tx) => {
+      await tx`select set_config('search_path', 'listener', true), set_config('app.scope', 'open_items', true)`;
+      return {
+        summaries: await tx`select * from summaries`,
+        segments: await tx`select * from transcript_segments`,
+        meetings: await tx`select * from meetings`,
+      };
+    });
+    expect(leaked).toEqual({ summaries: [], segments: [], meetings: [] });
+  });
+
+  it("deleting a client removes its summaries and items", async () => {
+    const { c, m } = await meetingWithTranscript("Acme");
+    await summarize(c, m);
+    await deleteClient(c);
+    const [counts] = await admin`select (select count(*)::int from summaries) s, (select count(*)::int from action_items) i`;
+    expect(counts).toEqual({ s: 0, i: 0 });
+  });
+
+  it("refuses to summarize an empty meeting", async () => {
+    const c = await createClient("Empty");
+    const m = await startMeeting(c, await createProject(c, "P"), "general");
+    await expect(summarize(c, m)).rejects.toThrow(/no transcript/);
   });
 });

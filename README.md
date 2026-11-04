@@ -9,7 +9,7 @@ A private meeting scribe that runs on an iPhone docked by your desk speaker. It 
 - **docs/REFERENCES.md**: similar projects and what was borrowed.
 - **docs/phase1-results.md**: test log for the iPhone capture spike.
 
-Status: Phase 2 built. Face ID sign in, clients and projects, and encrypted transcript storage with 30 day expiry.
+Status: Phase 3 built. Summaries, action items, feedback, meeting history per project, and open items across all clients.
 
 ## One time setup
 
@@ -42,6 +42,11 @@ Settings › Environment Variables, all environments checked:
 
 Then redeploy. Passkeys belong to one web address, so always use the stable one.
 
+### 3b. Phase 3 additions
+
+1. In Supabase **SQL Editor › + New query**, paste all of `db/migrations/0002_summaries.sql` and run it.
+2. In Vercel, add `ANTHROPIC_API_KEY` (Secret) with an API key from console.anthropic.com, then redeploy.
+
 ### 4. First sign in
 
 Open the stable address on the iPhone, enter the access code once, and approve Face ID. After that it's Face ID only. The access code can't add another passkey once one exists.
@@ -52,7 +57,15 @@ Open the stable address on the iPhone, enter the access code once, and approve F
 2. Tap **Start**. The bar under the status shows the client and project and whether lines are saving.
 3. Tap **Stop**. It saves the last lines, then shows **Saved**.
 
-Transcripts are kept 30 days after the meeting ends, then deleted by a daily job. Audio is never stored.
+After **Stop**, the summary and action items are generated automatically (usually under a minute). Tap **View** to open the meeting:
+
+- Tick action items done, edit their text, owner, or due date, or add your own.
+- Under **Speakers**, name the people on the call and pick which one is **Me**, then **Regenerate** for feedback on your own talk time.
+- **Edit summary** saves a new version. Earlier versions are kept.
+
+**Open items** lists everything still open across every client, grouped by due date, with snooze.
+
+Transcripts are kept 30 days after the meeting ends, then deleted by a daily job. Summaries and action items are kept. Audio is never stored.
 
 ## Develop locally
 

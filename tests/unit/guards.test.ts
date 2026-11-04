@@ -40,6 +40,17 @@ describe("source guards", () => {
     }
   });
 
+  it("never sends open items, or anything cross client, to the model", () => {
+    const viewFiles = sources.filter((f) => /openItems|open-items|api\/directory|MeetingPicker|manage\//i.test(f.rel));
+    expect(viewFiles.length).toBeGreaterThan(0);
+    for (const f of viewFiles) expect(`${f.rel}`).not.toSatisfy(() => /@\/lib\/assist|@anthropic-ai\/sdk/.test(f.text));
+  });
+
+  it("calls the model provider from one module only", () => {
+    const users = sources.filter((f) => f.text.includes("@anthropic-ai/sdk")).map((f) => f.rel);
+    expect(users).toEqual(["src/lib/assist/claude.ts"]);
+  });
+
   it("keeps the cron schedule in vercel.json equal to config.yaml", () => {
     const config = parse(readFileSync(path.join(root, "config.yaml"), "utf8"));
     const vercel = JSON.parse(readFileSync(path.join(root, "vercel.json"), "utf8"));

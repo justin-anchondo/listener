@@ -32,3 +32,11 @@ export async function withAuth<T>(fn: (tx: Tx) => Promise<T>): Promise<T> {
     return fn(tx);
   })) as T;
 }
+
+/** Consolidated open items (SPEC 7): reads action items across clients and nothing else. */
+export async function withOpenItems<T>(fn: (tx: Tx) => Promise<T>): Promise<T> {
+  return (await db().begin("read only", async (tx) => {
+    await tx`select set_config('search_path', 'listener', true), set_config('app.scope', 'open_items', true)`;
+    return fn(tx);
+  })) as T;
+}

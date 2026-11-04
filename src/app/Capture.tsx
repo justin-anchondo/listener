@@ -32,6 +32,14 @@ function clock(totalSec: number): string {
 }
 
 type SaveState = "off" | "starting" | "saving" | "finishing" | "saved" | "failed";
+type SummaryState = { state: "idle" } | { state: "working" } | { state: "ready"; href: string } | { state: "failed"; message: string; href: string };
+
+const SUMMARY_ERRORS: Record<string, string> = {
+  empty: "Nothing was saved to summarize.",
+  not_configured: "Summaries need ANTHROPIC_API_KEY on the server.",
+  refused: "The model declined to summarize this meeting.",
+  rate_limited: "Too many requests. Open the meeting to retry.",
+};
 
 export default function Capture({ settings }: { settings: CaptureSettings }) {
   const [status, setStatus] = useState<CaptureStatus>("idle");
@@ -45,6 +53,8 @@ export default function Capture({ settings }: { settings: CaptureSettings }) {
   const [selection, setSelection] = useState<Selection | null>(null);
   const [saveState, setSaveState] = useState<SaveState>("off");
   const [upload, setUpload] = useState<UploaderState | null>(null);
+  const [meetingId, setMeetingId] = useState<string | null>(null);
+  const [summary, setSummary] = useState<SummaryState>({ state: "idle" });
   const session = useRef<CaptureSession | null>(null);
   const uploader = useRef<SegmentUploader | null>(null);
   const early = useRef<Omit<UploadSegment, "seq">[]>([]); // segments heard before the meeting record exists
@@ -86,6 +96,8 @@ export default function Capture({ settings }: { settings: CaptureSettings }) {
     setDetail(undefined);
     setStartedAt(Date.now());
     setUpload(null);
+    setMeetingId(null);
+    setSummary({ state: "idle" });
     uploader.current = null;
     early.current = [];
     stopped.current = false;
@@ -115,13 +127,17 @@ export default function Capture({ settings }: { settings: CaptureSettings }) {
         maxPerPost: settings.storage.max_segments_per_post,
         onState: setUpload,
       });
+      setMeetingId(meetingId);
       for (const seg of early.current) u.add(seg);
       early.current = [];
       uploader.current = u;
       if (stopped.current) {
         // Stop was tapped before the meeting record came back.
         setSaveState("finishing");
-        void u.finish().then((ok) => setSaveState(ok ? "saved" : "failed"));
+        void u.finish().then((ok) => {
+          setSaveState(ok ? "saved" : "failed");
+          if (ok) void summarize(selection.clientId, meetingId);
+        });
       } else {
         setSaveState("saving");
       }
@@ -136,7 +152,26 @@ export default function Capture({ settings }: { settings: CaptureSettings }) {
     setSaveState("finishing");
     // The transcription service returns its last lines shortly after Stop.
     await new Promise((r) => setTimeout(r, 3500));
-    setSaveState((await u.finish()) ? "saved" : "failed");
+    const ok = await u.finish();
+    setSaveState(ok ? "saved" : "failed");
+    if (ok && selection && meetingId) await summarize(selection.clientId, meetingId);
+  }
+
+  async function summarize(clientId: string, id: string) {
+    const href = `/m/${clientId}/${id}`;
+    setSummary({ state: "working" });
+    try {
+      const res = await fetch(`/api/clients/${clientId}/meetings/${id}/summary`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone }),
+      });
+      if (res.ok) return setSummary({ state: "ready", href });
+      const { error: code } = (await res.json().catch(() => ({}))) as { error?: string };
+      setSummary({ state: "failed", href, message: SUMMARY_ERRORS[code ?? ""] ?? "Summary failed. Open the meeting to retry." });
+    } catch {
+      setSummary({ state: "failed", href, message: "Lost connection while summarizing. Open the meeting to retry." });
+    }
   }
 
   async function resume() {
@@ -212,8 +247,22 @@ export default function Capture({ settings }: { settings: CaptureSettings }) {
         </dl>
       )}
 
+      {summary.state !== "idle" && !active && (
+        <div className="summary-status" role="status">
+          {summary.state === "working" && <span>Summarizing the meeting… usually under a minute.</span>}
+          {summary.state === "ready" && <><span>Summary and action items ready.</span><a href={summary.href}>View</a></>}
+          {summary.state === "failed" && <><span className="error">{summary.message}</span><a href={summary.href}>Open meeting</a></>}
+        </div>
+      )}
+
       {!active && !finishing && (
-        <MeetingPicker templates={settings.templates} value={selection} onChange={setSelection} />
+        <>
+          <MeetingPicker templates={settings.templates} value={selection} onChange={setSelection} />
+          <nav className="nav-links">
+            {selection && <a href={`/p/${selection.clientId}/${selection.projectId}`}>Meetings for this project</a>}
+            <a href="/items">Open items</a>
+          </nav>
+        </>
       )}
 
       <section className="transcript" aria-live="polite">

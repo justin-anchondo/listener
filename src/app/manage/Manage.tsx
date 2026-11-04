@@ -125,6 +125,7 @@ export default function Manage() {
             <div key={p.id} className={`row project ${p.status}`}>
               <span>{p.name}{p.status === "archived" && " (archived)"}</span>
               <span className="actions">
+                <a className="link" href={`/p/${c.id}/${p.id}`}>Meetings</a>
                 <button className="link" onClick={() => openBrief(c, p)}>Brief</button>
                 <button className="link" onClick={() => renameProject(c, p)}>Rename</button>
                 <button className="link" onClick={() => toggleArchive(c, p)}>{p.status === "active" ? "Archive" : "Restore"}</button>

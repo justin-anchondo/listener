@@ -1,11 +1,9 @@
-import { redirect } from "next/navigation";
-import { hasSession } from "@/lib/auth/session";
-import { missingSettings } from "@/lib/setup";
+import { requirePageSession } from "@/lib/auth/guard";
 import Manage from "./Manage";
 
 export const dynamic = "force-dynamic";
 
 export default async function ManagePage() {
-  if (missingSettings().length || !(await hasSession())) redirect("/");
+  await requirePageSession();
   return <Manage />;
 }

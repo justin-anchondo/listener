@@ -71,8 +71,8 @@ Encrypted columns end in `_enc` and hold `nonce || ciphertext || tag`, base64.
 | meetings | id, client_id, project_id, template, started_at, ended_at, speaker_map_enc | Until deleted |
 | transcript_segments | id, client_id, meeting_id, seq, speaker, start_ms, end_ms, text_enc, expires_at | 30 days (config) |
 | suggestion_cards | id, client_id, meeting_id, kind, body_enc, pinned, expires_at | With transcript unless pinned |
-| summaries | id, client_id, meeting_id, version, summary_enc, decisions_enc, quotes_enc, feedback_enc, tags, created_at | Until deleted |
-| action_items | id, client_id, project_id, meeting_id, title_enc, owner_enc, due_date, status, source_quote_enc, source_ms, created_at, closed_at | Until deleted |
+| summaries | id, client_id, meeting_id, version, source, model, content_enc (summary, decisions, quotes, feedback, talk stats as one encrypted JSON), tags, created_at. Append only: the app role can't update or delete | Until deleted |
+| action_items | id, client_id, project_id, meeting_id, title_enc, owner_enc, due_date, status, snoozed_until, source_quote_enc, source_ms, edited, created_at, closed_at | Until deleted |
 | passkeys | id, public_key, counter, transports, created_at, last_used_at | Until removed |
 | audit_log | id, at, event, client_id, object_id, count | 365 days (config) |
 
@@ -133,6 +133,9 @@ Status: built 2026-11-03. Awaiting deployment.
 Done when: every policy and crypto function has tests, a test proves a query without `client_id` fails, a test proves expired segments are purged, and a grep based test proves no logger call receives raw transcript fields.
 
 ### Phase 3: Post meeting outputs and dashboard
+
+Status: built 2026-11-04. Awaiting deployment (migration `0002_summaries`, `ANTHROPIC_API_KEY`).
+
 
 - End meeting pipeline: summary, decisions, action items, key quotes, feedback, tags, using structured output validated with zod.
 - Review and edit screen. Edits create a new summary version.

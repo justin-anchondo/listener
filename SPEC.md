@@ -96,7 +96,7 @@ Generated when the owner taps End, in this order:
 4. Feedback for the owner: talk time ratio, questions asked versus answered, commitments made, agenda items or brief questions not covered, and two or three concrete suggestions for next time.
 5. Tags: from a controlled list plus up to a few free form tags.
 
-The owner reviews and can edit everything before it is saved as final. Edits are saved as a new version. Earlier versions are kept.
+Outputs are saved as soon as they are generated, and the owner can edit them at any time. Each edit or regeneration is saved as a new version; earlier versions are kept. Regenerating keeps action items the owner has completed or edited.
 
 ## 5. Data Retention
 

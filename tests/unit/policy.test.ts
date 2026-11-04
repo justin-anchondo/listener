@@ -93,3 +93,42 @@ describe("limits", () => {
     expect(() => cleanSegments("nope", 200, 5000)).toThrow(LimitError);
   });
 });
+
+import { cleanDate, cleanList, cleanSpeakerMap } from "@/lib/policy/limits";
+import { cleanEditedSummary } from "@/lib/assist/edit";
+
+describe("phase 3 limits", () => {
+  it("validates dates", () => {
+    expect(cleanDate("2026-11-06")).toBe("2026-11-06");
+    expect(cleanDate("")).toBeNull();
+    expect(cleanDate(null)).toBeNull();
+    expect(() => cleanDate("2026-02-30")).toThrow(LimitError);
+    expect(() => cleanDate("tomorrow")).toThrow(LimitError);
+  });
+
+  it("validates speaker maps and allows one Me", () => {
+    expect(cleanSpeakerMap({ "0": " Me ", "1": "Dana  Lee", "2": "" }, 80)).toEqual({ "0": "Me", "1": "Dana Lee" });
+    expect(() => cleanSpeakerMap({ "0": "Me", "1": "Me" }, 80)).toThrow(LimitError);
+    expect(() => cleanSpeakerMap({ x: "Dana" }, 80)).toThrow(LimitError);
+    expect(() => cleanSpeakerMap(["Me"], 80)).toThrow(LimitError);
+  });
+
+  it("validates lists", () => {
+    expect(cleanList([" a ", "", "b"], 5, 10)).toEqual(["a", "b"]);
+    expect(() => cleanList(["a", "b"], 1, 10)).toThrow(LimitError);
+    expect(() => cleanList([1], 5, 10)).toThrow(LimitError);
+  });
+
+  it("validates an edited summary and keeps only allowed tags", () => {
+    const l = { maxListItems: 5, maxItemChars: 100, maxFreeTags: 2, allowedTags: ["pricing"] };
+    const r = cleanEditedSummary({
+      content: { title: "T", summary: "S", main_points: ["p"], decisions: [], key_quotes: [{ quote: "q", speaker: "Dana", at_ms: 10 }], feedback: { suggestions: ["s"] }, free_tags: ["x"] },
+      tags: ["pricing", "nope"],
+    }, l);
+    expect(r.tags).toEqual(["pricing"]);
+    expect(r.content.title).toBe("T");
+    expect(r.content.feedback.suggestions).toEqual(["s"]);
+    expect(() => cleanEditedSummary({ content: { title: "" } }, l)).toThrow(LimitError);
+    expect(() => cleanEditedSummary({ content: { title: "T", key_quotes: [{ quote: "q", speaker: "s", at_ms: -1 }] } }, l)).toThrow(LimitError);
+  });
+});

@@ -58,6 +58,12 @@ const configSchema = z.object({
     live_max_latency_ms: z.number().int().positive(),
     live_transcript_window_minutes: z.number().positive(),
     post_meeting_timeout_seconds: z.number().positive(),
+    post_request_timeout_seconds: z.number().positive(),
+    post_effort: z.enum(["low", "medium", "high", "xhigh", "max"]),
+    post_max_tokens: z.number().int().positive(),
+    max_list_items: z.number().int().positive(),
+    max_item_chars: z.number().int().positive(),
+    transcript_merge_gap_seconds: z.number().nonnegative(),
     max_free_form_tags: z.number().int().nonnegative(),
   }),
   recall: z.object({
