@@ -48,6 +48,11 @@ Then redeploy. Passkeys belong to one web address, so always use the stable one.
 2. Then run `db/migrations/0004_logos_types_recent.sql` the same way (client logos, editable meeting types, recent meetings list), and then `db/migrations/0005_live_suggestions.sql` (live tips).
 3. In Vercel, add `ANTHROPIC_API_KEY` (Secret) with an API key from console.anthropic.com, then redeploy.
 
+### 3c. Security hardening
+
+1. After 0005, run `db/migrations/0006_function_search_path.sql` the same way. It pins two database functions so nothing else can stand in for what they call (clears Supabase's "Function Search Path Mutable" warning).
+2. Optional but recommended: in Supabase **Project Settings › Database › SSL Configuration**, click **Download certificate**. Open the file in a text editor, copy everything (including the `BEGIN` and `END` lines), and add it in Vercel as `DATABASE_CA_CERT`. With it, the server checks it is really talking to your Supabase database, not just that the line is encrypted. Add it to **Preview** first, check a preview works, then add it to **Production** and redeploy.
+
 ### 4. First sign in
 
 Open the stable address on the iPhone, enter the access code once, and approve Face ID. After that it's Face ID only. The access code can't add another passkey once one exists.

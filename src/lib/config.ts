@@ -18,6 +18,7 @@ const configSchema = z.object({
     session_max_hours: z.number().positive(),
     session_refresh_seconds: z.number().int().positive(),
     passkey_challenge_seconds: z.number().int().positive(),
+    hsts_max_age_seconds: z.number().int().positive(),
   }),
   access_gate: z.object({
     min_code_length: z.number().int().min(8),
