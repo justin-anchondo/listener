@@ -8,16 +8,11 @@ import { ClientAvatar } from "@/components/app/client-avatar";
 import { MeetingRow, type MeetingRowData } from "@/components/app/meeting-row";
 import { PageHeader } from "@/components/app/page-header";
 import { Drawer, DrawerContent } from "@/components/ui/drawer";
-import { SegmentedControl } from "@/components/ui/segmented-control";
 import { type Client, loadDirectory, sendJson } from "@/lib/client/directory";
 import { cn } from "@/lib/utils";
 
-type View = "recent" | "clients";
-const VIEW_KEY = "listener.meetingsView"; // per device convenience
-
 export default function MeetingsHome() {
   const router = useRouter();
-  const [view, setView] = useState<View>("recent");
   const [clients, setClients] = useState<Client[] | null>(null);
   const [filter, setFilter] = useState<string | null>(null);
   const [meetings, setMeetings] = useState<MeetingRowData[] | null>(null);
@@ -27,12 +22,6 @@ export default function MeetingsHome() {
 
   useEffect(() => {
     loadDirectory().then(setClients).catch(() => setError("Couldn't load clients."));
-    try {
-      const v = localStorage.getItem(VIEW_KEY);
-      if (v === "recent" || v === "clients") setView(v);
-    } catch {
-      // storage unavailable
-    }
   }, []);
 
   useEffect(() => {
@@ -42,15 +31,6 @@ export default function MeetingsHome() {
       .then((b: { meetings: MeetingRowData[] } | null) => b && setMeetings(b.meetings))
       .catch(() => setError("Couldn't load meetings."));
   }, [filter]);
-
-  function changeView(v: View) {
-    setView(v);
-    try {
-      localStorage.setItem(VIEW_KEY, v);
-    } catch {
-      // storage unavailable
-    }
-  }
 
   async function createClient() {
     const res = await sendJson("/api/clients", "POST", { name: name.trim() });
@@ -63,14 +43,7 @@ export default function MeetingsHome() {
     <>
       <PageHeader title="Meetings" />
       <div className="flex flex-col gap-3 px-5 pt-3">
-        <SegmentedControl<View>
-          options={[{ value: "recent", label: "Recent" }, { value: "clients", label: "By client" }]}
-          value={view}
-          onChange={changeView}
-          fullWidth
-          aria-label="Meetings view"
-        />
-        {view === "recent" && clients && clients.length > 1 && (
+        {clients && (
           <div className="-mx-5 flex gap-2 overflow-x-auto px-5 pb-1 [scrollbar-width:none]" role="group" aria-label="Filter by client">
             <button
               type="button"
@@ -95,6 +68,13 @@ export default function MeetingsHome() {
                 {c.name}
               </button>
             ))}
+            <button
+              type="button"
+              onClick={() => { setName(""); setAdding(true); }}
+              className="flex min-h-9 shrink-0 items-center gap-1 rounded-full border border-dashed px-3 text-[13px] font-medium text-muted-foreground"
+            >
+              <Plus className="size-3.5" aria-hidden="true" /> New client
+            </button>
           </div>
         )}
       </div>
@@ -102,44 +82,16 @@ export default function MeetingsHome() {
       <main className="flex flex-col px-5 pt-3 pb-6">
         {error && <p className="text-sm text-destructive" role="alert">{error}</p>}
 
-        {view === "recent" && (
-          <>
-            {!meetings && !error && <p className="text-sm text-muted-foreground">Loading…</p>}
-            {meetings?.length === 0 && <p className="text-[15px] text-muted-foreground">No meetings yet. Record one from the Record tab.</p>}
-            {filter && (
-              <Link href={`/c/${filter}`} className="mb-1 flex min-h-10 items-center gap-1 self-start text-[14px] text-link">
-                Client page <ChevronRight className="size-4" aria-hidden="true" />
-              </Link>
-            )}
-            <ul>{meetings?.map((m) => <MeetingRow key={m.id} m={m} />)}</ul>
-          </>
+        {!meetings && !error && <p className="text-sm text-muted-foreground">Loading…</p>}
+        {filter && (
+          <Link href={`/c/${filter}`} className="mb-1 flex min-h-10 items-center gap-1 self-start text-[14px] text-link">
+            Client page <ChevronRight className="size-4" aria-hidden="true" />
+          </Link>
         )}
-
-        {view === "clients" && (
-          <>
-            {!clients && !error && <p className="text-sm text-muted-foreground">Loading…</p>}
-            <ul>
-              {clients?.map((c) => {
-                const active = c.projects.filter((p) => p.status === "active").length;
-                return (
-                  <li key={c.id} className="border-b border-muted last:border-b-0">
-                    <Link href={`/c/${c.id}`} className="flex min-h-16 items-center gap-3 py-3">
-                      <ClientAvatar client={c} size={40} />
-                      <span className="flex min-w-0 flex-1 flex-col">
-                        <span className="truncate text-[16px] font-semibold">{c.name}</span>
-                        <span className="text-[13px] text-muted-foreground">{active} project{active === 1 ? "" : "s"}</span>
-                      </span>
-                      <ChevronRight className="size-4 text-muted-foreground" aria-hidden="true" />
-                    </Link>
-                  </li>
-                );
-              })}
-            </ul>
-            <button type="button" onClick={() => { setName(""); setAdding(true); }} className="mt-2 flex min-h-11 items-center gap-1.5 self-start text-[15px] font-medium text-link">
-              <Plus className="size-4" aria-hidden="true" /> New client
-            </button>
-          </>
+        {meetings?.length === 0 && (
+          <p className="text-[15px] text-muted-foreground">{filter ? "No meetings for this client yet." : "No meetings yet. Record one from the Record tab."}</p>
         )}
+        <ul>{meetings?.map((m) => <MeetingRow key={m.id} m={m} showClient={!filter} />)}</ul>
       </main>
 
       <Drawer open={adding} onOpenChange={(o) => !o && setAdding(false)}>

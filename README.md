@@ -58,7 +58,7 @@ Three tabs at the bottom: **Record**, **Meetings**, **Open items**. The small su
 
 1. **Record:** tap the client / project pill to choose (or add) a client, project, and meeting type in the sheet that slides up. The pencil next to **Client** opens the client page; the pencil next to **Meeting type** edits the types (name and what to watch for). `config.yaml` only provides the starting types. Your last choice is remembered. Tap the big button to start.
 2. While recording, the transcript fills the screen and the bar at the bottom shows the timer and mic level. Tap **ⓘ** for connection details, **■** to stop.
-3. **Meetings:** recent meetings across clients, with generated title, participants, client, project, and time. Tap a client chip to filter, then **Client page** for that client's projects and meetings. The pencil on a client page edits the name and logo or deletes the client; the pencil on a project page renames or archives it.
+3. **Meetings:** recent meetings across clients, with generated title, participants, client, project, and time. Tap a client chip to filter, then **Client page** for that client's projects and meetings. **+ New client** is at the end of the chips. The pencil on a client page edits the name and logo or deletes the client; the pencil on a project page renames or archives it.
 
 After **Stop**, the summary and action items are generated automatically (usually under a minute). Tap **View** to open the meeting:
 
