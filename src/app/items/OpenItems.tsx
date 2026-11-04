@@ -1,5 +1,6 @@
 "use client";
 
+import { isMine } from "@/lib/owner";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { type ItemPatch, ItemRow, ItemSheet, type SheetItem } from "@/components/app/items";
 import { PageHeader } from "@/components/app/page-header";
@@ -34,7 +35,7 @@ const DATE_GROUPS: { key: DueGroup; label: string; urgent?: boolean }[] = [
 
 const VIEW_KEY = "listener.itemsView"; // per device convenience
 
-export default function OpenItems() {
+export default function OpenItems({ ownerNames }: { ownerNames: string[] }) {
   const [items, setItems] = useState<OpenItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<Set<string>>(new Set()); // ticked this visit, kept visible so it can be undone
@@ -89,7 +90,7 @@ export default function OpenItems() {
   }
 
   const today = localIsoDate();
-  const shown = useMemo(() => (items ?? []).filter((i) => !mineOnly || i.owner === "Me"), [items, mineOnly]);
+  const shown = useMemo(() => (items ?? []).filter((i) => !mineOnly || isMine(i.owner, ownerNames)), [items, mineOnly, ownerNames]);
   const openOnes = shown.filter((i) => !done.has(i.id));
   const counts = dueSummary(openOnes, today);
 

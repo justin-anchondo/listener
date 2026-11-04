@@ -77,6 +77,9 @@ recall:                             # SPEC 4.2, BUILD_PLAN 1
   max_context_tokens: 150000        # above this, reconsider embeddings
   recent_summaries: 20
 
+owner:
+  names: ["Justin"]                 # how others refer to me; items owned by these count as "mine"
+
 tags:                               # SPEC 4.3 controlled list
   - decision
   - pricing

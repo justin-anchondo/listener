@@ -18,6 +18,8 @@ export type PromptInput = {
   allowedTags: string[];
   stats: TalkStats;
   mergeGapMs: number;
+  /** What other people call the owner, e.g. ["Justin"]. */
+  ownerNames?: string[];
 };
 
 export type BuiltPrompt = { system: string; user: string; lineMs: number[] };
@@ -75,6 +77,7 @@ export function buildPostMeetingPrompt(p: PromptInput): BuiltPrompt {
     `Meeting type: ${p.template.replace(/_/g, " ")} (watch for: ${p.watchFor.join(", ") || "anything notable"})`,
     `Meeting date: ${p.meetingDate} (${p.weekday})`,
     `Owner's speaker label: ${mapped ? '"Me"' : "unknown"}`,
+    `Owner's name: ${p.ownerNames?.length ? p.ownerNames.join(" / ") + ' (anything assigned to this name is owner "me")' : "unknown"}`,
     `Allowed tags: ${p.allowedTags.join(", ")}`,
     "",
     "<project_brief>",

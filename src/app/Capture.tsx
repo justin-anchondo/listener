@@ -9,6 +9,7 @@ import { ClientSheet, useClientSelection } from "@/components/app/client-sheet";
 import { MeetingTypesSheet } from "@/components/app/edit-sheets";
 import { PageHeader } from "@/components/app/page-header";
 import { RecorderBar } from "@/components/app/recorder-bar";
+import { SiriOrb } from "@/components/ui/siri-orb";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import type { CaptureSettings } from "@/lib/config";
 import {
@@ -358,9 +359,12 @@ export default function Capture({ settings }: { settings: CaptureSettings }) {
             disabled={!clients}
             aria-label="Start recording"
             whileTap={reduced ? undefined : { scale: 0.94 }}
-            className="grid size-[148px] place-items-center rounded-full border-[10px] border-accent bg-primary text-primary-foreground shadow-[0_10px_30px_rgba(37,99,235,0.25)] disabled:opacity-50"
+            className="relative grid size-[168px] place-items-center rounded-full shadow-[0_12px_40px_rgba(124,92,255,0.28)] disabled:opacity-50"
           >
-            <Mic className="size-12" strokeWidth={1.8} aria-hidden="true" />
+            <span className="absolute inset-0">
+              <SiriOrb size="168px" colors={{ bg: "var(--background)" }} animationDuration={18} />
+            </span>
+            <Mic className="relative size-11 text-foreground/75 drop-shadow-[0_1px_8px_var(--background)] dark:text-white" strokeWidth={2} aria-hidden="true" />
           </motion.button>
           <p className="text-[15px] font-semibold">{selection ? "Tap to start" : "Choose a project to start"}</p>
         </div>

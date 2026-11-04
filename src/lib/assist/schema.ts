@@ -1,3 +1,4 @@
+import { isMine } from "@/lib/owner";
 import { z } from "zod";
 
 // What the model returns after a meeting (SPEC 4.3). Kept flat and simple so
@@ -77,6 +78,8 @@ export type CleanLimits = {
   maxBriefUpdates?: number;
   /** Amendment texts already on the project (active or dismissed); repeats are dropped. */
   knownBriefTexts?: string[];
+  /** The owner's names; items assigned to them are stored as "Me". */
+  ownerNames?: string[];
 };
 
 export function normalizeText(text: string): string {
@@ -141,7 +144,7 @@ export function cleanOutput(
   const actionItems = out.action_items
     .map((a) => {
       const name = a.owner_name?.trim() || null;
-      const owner = a.owner === "me" ? "Me" : name ?? (a.owner === "them" ? "Them" : null);
+      const owner = a.owner === "me" || isMine(name, l.ownerNames ?? []) ? "Me" : name ?? (a.owner === "them" ? "Them" : null);
       return {
         title: clip(a.title, l.maxItemChars),
         owner: owner ? clip(owner, 80) : null,

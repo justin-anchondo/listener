@@ -62,6 +62,7 @@ export async function summarizeMeeting(
     allowedTags: config.tags,
     stats,
     mergeGapMs: config.assist.transcript_merge_gap_seconds * 1000,
+    ownerNames: config.owner.names,
   });
 
   const { output, model } = await generate(prompt, {
@@ -78,6 +79,7 @@ export async function summarizeMeeting(
     allowedTags: config.tags,
     maxBriefUpdates: config.assist.max_brief_updates,
     knownBriefTexts: ctx.knownAmendmentTexts,
+    ownerNames: config.owner.names,
   });
 
   const summaryId = await saveGeneratedSummary(

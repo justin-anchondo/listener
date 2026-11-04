@@ -75,6 +75,7 @@ const configSchema = z.object({
     max_context_tokens: z.number().int().positive(),
     recent_summaries: z.number().int().positive(),
   }),
+  owner: z.object({ names: z.array(z.string()) }),
   tags: z.array(z.string()),
   templates: z.record(z.string(), z.object({ watch_for: z.array(z.string()) })),
 });
