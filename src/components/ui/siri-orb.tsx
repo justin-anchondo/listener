@@ -2,7 +2,8 @@
 
 // Siri Orb from 21st.dev (educalvolpz/siri-orb). Pure CSS: conic gradients
 // rotated by a registered --angle property, no canvas or WebGL, so it is
-// light on battery. Adapted: shared cn, named export, tighter style scope.
+// light on battery. Adapted: shared cn, named export, tighter style scope,
+// and a clip plus feathered mask so Safari keeps it round.
 
 import type * as React from "react";
 import { cn } from "@/lib/utils";
@@ -58,7 +59,16 @@ export function SiriOrb({ size = "192px", className, colors, animationDuration =
     >
       <style>{`
         @property --angle { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
-        .siri-orb { display: grid; grid-template-areas: "stack"; overflow: hidden; border-radius: 50%; position: relative; }
+        .siri-orb {
+          display: grid; grid-template-areas: "stack"; overflow: hidden; border-radius: 50%; position: relative;
+          /* Safari ignores border-radius clipping when children use filters; clip-path and a mask always hold.
+             The mask also feathers the edge so the orb fades into the page instead of ending on a hard line. */
+          clip-path: circle(50% at 50% 50%);
+          -webkit-mask-image: radial-gradient(closest-side, #000 88%, transparent 100%);
+          mask-image: radial-gradient(closest-side, #000 88%, transparent 100%);
+          transform: translateZ(0);
+          isolation: isolate;
+        }
         .siri-orb::before, .siri-orb::after { content: ""; display: block; grid-area: stack; width: 100%; height: 100%; border-radius: 50%; }
         .siri-orb::before {
           background:
