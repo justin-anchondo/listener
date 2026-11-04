@@ -592,12 +592,14 @@ describe.skipIf(!run)("live assistant and recall", () => {
     const a = await clientWithHistory("Acme", "Zanzibar");
     const out = { cards: [{ kind: "question", text: "Ask who signs off on hosting.", line: 0 }, { kind: "talking_point", text: "Budget is fixed per the brief.", line: null }] };
     const seen: string[] = [];
-    const first = await runLiveCheck(loadConfig(), a.c, a.now, [{ speaker: 0, startMs: 7000, text: "Hosting?" }], "interval", fake(out, seen));
+    const base = loadConfig();
+    const config = { ...base, assist: { ...base.assist, live_max_suggestions: 2 } };
+    const first = await runLiveCheck(config, a.c, a.now, [{ speaker: 0, startMs: 7000, text: "Hosting?" }], "interval", fake(out, seen));
     expect(first.cards.map((c) => [c.kind, c.text, c.sourceMs])).toEqual([
       ["question", "Ask who signs off on hosting.", 7000],
       ["talking_point", "Budget is fixed per the brief.", null],
     ]);
-    const again = await runLiveCheck(loadConfig(), a.c, a.now, [{ speaker: 0, startMs: 9000, text: "Hosting again" }], "interval", fake(out, seen));
+    const again = await runLiveCheck(config, a.c, a.now, [{ speaker: 0, startMs: 9000, text: "Hosting again" }], "interval", fake(out, seen));
     expect(again.cards).toEqual([]);
     expect(seen[1]).toContain("Ask who signs off on hosting.");
     const raw = JSON.stringify(await admin`select * from suggestions`);
