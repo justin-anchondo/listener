@@ -89,6 +89,14 @@ export default function MeetingView({ clientId, meetingId, allowedTags }: { clie
   const [error, setError] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
   const [tab, setTab] = useState<Tab>("summary");
+  const [pinned, setPinned] = useState<{ id: string; kind: string; text: string }[]>([]);
+
+  useEffect(() => {
+    void fetch(`/api/clients/${clientId}/meetings/${meetingId}/suggestions?pinned=1`, { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : { suggestions: [] }))
+      .then((b: { suggestions: { id: string; kind: string; text: string }[] }) => setPinned(b.suggestions))
+      .catch(() => undefined);
+  }, [clientId, meetingId]);
   const [openItem, setOpenItem] = useState<Item | null>(null);
   const [editing, setEditing] = useState(false);
   const [confirmRegen, setConfirmRegen] = useState(false);
@@ -215,6 +223,11 @@ export default function MeetingView({ clientId, meetingId, allowedTags }: { clie
             )}
             {s.decisions.length > 0 && <Section title="Decisions"><Bullets items={s.decisions} /></Section>}
             {s.main_points.length > 0 && <Section title="Main points"><Bullets items={s.main_points} /></Section>}
+            {pinned.length > 0 && (
+              <Section title="Pinned during the meeting">
+                <Bullets items={pinned.map((p) => p.text)} />
+              </Section>
+            )}
             {data.briefUpdates.length > 0 && (
               <Section title="Added to project brief">
                 <ul className="flex flex-col gap-2">

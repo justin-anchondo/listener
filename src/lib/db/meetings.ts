@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { decryptField, encryptField } from "@/lib/crypto/keys";
 import { audit } from "@/lib/db/audit";
 import { NotFoundError, clientKey } from "@/lib/db/keyring";
+import { expireSuggestionsFrom } from "@/lib/db/live";
 import { withClient } from "@/lib/db/scoped";
 import type { SegmentInput } from "@/lib/policy/limits";
 import { computeExpiresAt } from "@/lib/policy/retention";
@@ -54,13 +55,16 @@ export async function saveSegments(
 }
 
 /** Marks the meeting ended and sets its transcript to expire relative to the end (SPEC 5). */
-export async function endMeeting(clientId: string, meetingId: string, retentionDays: number, now = new Date()): Promise<void> {
+export async function endMeeting(
+  clientId: string, meetingId: string, retentionDays: number, now = new Date(), suggestionDays = retentionDays,
+): Promise<void> {
   await withClient(clientId, async (tx, id) => {
     const rows = await tx<{ ended_at: Date }[]>`
       update meetings set ended_at = coalesce(ended_at, ${now}) where id = ${meetingId} returning ended_at`;
     if (rows.length === 0) throw new NotFoundError("meeting");
     const expiresAt = computeExpiresAt(rows[0].ended_at, retentionDays);
     await tx`update transcript_segments set expires_at = ${expiresAt} where meeting_id = ${meetingId}`;
+    await expireSuggestionsFrom(tx, meetingId, rows[0].ended_at, suggestionDays);
     await audit(tx, "meeting.ended", { clientId: id, objectId: meetingId });
   });
 }

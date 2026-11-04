@@ -162,3 +162,49 @@ describe("logos and meeting types", () => {
     expect(() => cleanWatchFor(["x".repeat(61)], 10, 60)).toThrow(LimitError);
   });
 });
+
+describe("live window and recall question limits", () => {
+  it("accepts a window, drops empty lines, and keeps the newest text under the cap", async () => {
+    const { cleanLiveWindow } = await import("@/lib/policy/limits");
+    const lines = [
+      { speaker: 0, startMs: 0, text: "aaaa" },
+      { speaker: 1, startMs: 10, text: "  " },
+      { speaker: null, startMs: 20, text: "bbbb" },
+      { speaker: 1, startMs: 30, text: "cccc" },
+    ];
+    expect(cleanLiveWindow(lines, 10, 100, 8).map((l) => l.text)).toEqual(["bbbb", "cccc"]);
+    expect(cleanLiveWindow(lines, 10, 100, 1000)).toHaveLength(3);
+  });
+  it("rejects malformed or oversized windows", async () => {
+    const { cleanLiveWindow, LimitError } = await import("@/lib/policy/limits");
+    expect(() => cleanLiveWindow("x", 10, 100, 100)).toThrow(LimitError);
+    expect(() => cleanLiveWindow(Array(11).fill({ speaker: 0, startMs: 0, text: "a" }), 10, 100, 100)).toThrow(LimitError);
+    expect(() => cleanLiveWindow([{ speaker: -1, startMs: 0, text: "a" }], 10, 100, 100)).toThrow(LimitError);
+    expect(() => cleanLiveWindow([{ speaker: 0, startMs: 0, text: "a".repeat(101) }], 10, 100, 100)).toThrow(LimitError);
+  });
+  it("bounds recall questions", async () => {
+    const { cleanQuestion, LimitError } = await import("@/lib/policy/limits");
+    expect(cleanQuestion("  what  did we agree? ", 50)).toBe("what did we agree?");
+    expect(() => cleanQuestion("", 50)).toThrow(LimitError);
+    expect(() => cleanQuestion("x".repeat(51), 50)).toThrow(LimitError);
+  });
+});
+
+describe("suggestion retention", () => {
+  it("pinned cards never expire; unpinned follow the meeting end, or now while running", async () => {
+    const { suggestionExpiresAt } = await import("@/lib/policy/retention");
+    const now = new Date("2026-11-04T12:00:00Z");
+    const ended = new Date("2026-11-01T12:00:00Z");
+    expect(suggestionExpiresAt(true, ended, now, 30)).toBeNull();
+    expect(suggestionExpiresAt(false, ended, now, 30)?.toISOString()).toBe("2026-12-01T12:00:00.000Z");
+    expect(suggestionExpiresAt(false, null, now, 30)?.toISOString()).toBe("2026-12-04T12:00:00.000Z");
+  });
+});
+
+describe("redact for live checks", () => {
+  it("keeps the live check reason, found flag, and cache counts, but no text", () => {
+    expect(redact({ event: "live.checked", reason: "question", cacheRead: 1200, found: false, text: "secret words", answer: "x" }))
+      .toEqual({ event: "live.checked", reason: "question", cacheRead: 1200, found: false });
+    expect(redact({ reason: "they said the budget is 40k" })).toEqual({ reason: "[redacted]" });
+  });
+});

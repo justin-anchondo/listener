@@ -35,7 +35,7 @@ describe.skipIf(!run)("database isolation", () => {
   });
 
   beforeEach(async () => {
-    await admin`truncate clients, projects, meetings, transcript_segments, passkeys, audit_log, summaries, action_items, brief_amendments, meeting_types cascade`;
+    await admin`truncate clients, projects, meetings, transcript_segments, passkeys, audit_log, summaries, action_items, brief_amendments, meeting_types, suggestions cascade`;
   });
 
   it("round trips a client, project, meeting, and transcript", async () => {
@@ -252,7 +252,7 @@ describe.skipIf(!run)("summaries and action items", () => {
   });
 
   beforeEach(async () => {
-    await admin`truncate clients, projects, meetings, transcript_segments, passkeys, audit_log, summaries, action_items, brief_amendments, meeting_types cascade`;
+    await admin`truncate clients, projects, meetings, transcript_segments, passkeys, audit_log, summaries, action_items, brief_amendments, meeting_types, suggestions cascade`;
   });
 
   async function meetingWithTranscript(name: string) {
@@ -515,5 +515,127 @@ describe.skipIf(!run)("summaries and action items", () => {
     const c = await createClient("Empty");
     const m = await startMeeting(c, await createProject(c, "P"), "general");
     await expect(summarize(c, m)).rejects.toThrow(/no transcript/);
+  });
+});
+
+describe.skipIf(!run)("live assistant and recall", () => {
+  let app: postgres.Sql;
+  let admin: postgres.Sql;
+  const seg = (seq: number, speaker: number, text: string) => ({ seq, speaker, startMs: seq * 5000, endMs: seq * 5000 + 4000, text });
+
+  beforeAll(() => {
+    process.env.LISTENER_MASTER_KEY = randomBytes(32).toString("base64");
+    app = postgres(appUrl!, { prepare: false, max: 2 });
+    admin = postgres(adminUrl!, { max: 1, onnotice: () => undefined, connection: { search_path: "listener" } });
+    setDbForTests(app);
+  });
+
+  afterAll(async () => {
+    setDbForTests(undefined);
+    await app.end();
+    await admin.end();
+  });
+
+  beforeEach(async () => {
+    await admin`truncate clients, projects, meetings, transcript_segments, passkeys, audit_log, summaries, action_items, brief_amendments, meeting_types, suggestions cascade`;
+  });
+
+  // Each client gets distinctive words so a leak is easy to spot.
+  async function clientWithHistory(name: string, secret: string) {
+    const { addOwnerNote } = await import("@/lib/db/amendments");
+    const { saveGeneratedSummary } = await import("@/lib/db/summaries");
+    const c = await createClient(name);
+    const p = await createProject(c, `${name} ${secret} project`);
+    await updateProject(c, p, { brief: `Open questions:\n- ${secret} hosting` });
+    await addOwnerNote(c, p, `${secret} budget is fixed.`);
+    const old = await startMeeting(c, p, "general");
+    await saveSegments(c, old, [seg(0, 1, `We agreed the ${secret} price.`)], 30);
+    await endMeeting(c, old, 30);
+    await saveGeneratedSummary(c, old, "fake", {
+      title: `${secret} pricing call`, purpose: "p", summary: `${secret} summary text.`, main_points: [], decisions: [`${secret} decision`],
+      key_quotes: [], feedback: { went_well: [], suggestions: [], not_covered: [], commitments_by_me: [], open_questions: [] }, free_tags: [], participants: [],
+    }, [], [{ title: `${secret} follow up`, owner: "Me", dueDate: null, sourceQuote: null, sourceMs: null }]);
+    const now = await startMeeting(c, p, "general");
+    return { c, p, old, now };
+  }
+
+  const fake = (output: unknown, seen: string[]) => (async (_schema: unknown, prompt: { system: string; context: string; user: string }) => {
+    seen.push(prompt.system + prompt.context + prompt.user);
+    return { output, model: "fake", cacheRead: 0, cacheWrite: 0, inputTokens: 0 };
+  }) as unknown as import("@/lib/assist/claude").FastGenerate;
+
+  it("builds recall and live prompts for one client only", async () => {
+    const { loadConfig } = await import("@/lib/config");
+    const { askRecall, runLiveCheck } = await import("@/lib/assist/assistant");
+    const a = await clientWithHistory("Acme", "Zanzibar");
+    await clientWithHistory("Beta", "Quokka");
+    const seen: string[] = [];
+    const r = await askRecall(loadConfig(), a.c, "What price did we agree?", fake({ found: true, answer: "The Zanzibar price.", sources: ["M1"] }, seen));
+    expect(r.found).toBe(true);
+    expect(r.sources[0]).toMatchObject({ kind: "meeting", meetingId: a.old, label: "Zanzibar pricing call" });
+    await runLiveCheck(loadConfig(), a.c, a.now, [{ speaker: 1, startMs: 0, text: "So what about hosting?" }], "brief_topic",
+      fake({ cards: [{ kind: "reminder", text: "Zanzibar budget is fixed.", line: 0 }] }, seen));
+    expect(seen).toHaveLength(2);
+    for (const p of seen) {
+      expect(p).toContain("Zanzibar");
+      expect(p).not.toMatch(/Quokka|Beta/);
+    }
+    expect(seen[0]).toContain("We agreed the Zanzibar price.");
+    expect(seen[0]).toContain("Zanzibar follow up");
+    expect(seen[1]).toContain("Zanzibar summary text.");
+  });
+
+  it("stores cards encrypted, never repeats them, pins them past the purge, and purges the rest", async () => {
+    const { loadConfig } = await import("@/lib/config");
+    const { runLiveCheck } = await import("@/lib/assist/assistant");
+    const { listSuggestions, updateSuggestion } = await import("@/lib/db/live");
+    const a = await clientWithHistory("Acme", "Zanzibar");
+    const out = { cards: [{ kind: "question", text: "Ask who signs off on hosting.", line: 0 }, { kind: "talking_point", text: "Budget is fixed per the brief.", line: null }] };
+    const seen: string[] = [];
+    const first = await runLiveCheck(loadConfig(), a.c, a.now, [{ speaker: 0, startMs: 7000, text: "Hosting?" }], "interval", fake(out, seen));
+    expect(first.cards.map((c) => [c.kind, c.text, c.sourceMs])).toEqual([
+      ["question", "Ask who signs off on hosting.", 7000],
+      ["talking_point", "Budget is fixed per the brief.", null],
+    ]);
+    const again = await runLiveCheck(loadConfig(), a.c, a.now, [{ speaker: 0, startMs: 9000, text: "Hosting again" }], "interval", fake(out, seen));
+    expect(again.cards).toEqual([]);
+    expect(seen[1]).toContain("Ask who signs off on hosting.");
+    const raw = JSON.stringify(await admin`select * from suggestions`);
+    expect(raw).not.toMatch(/hosting|Budget/i);
+
+    await updateSuggestion(a.c, first.cards[0].id, { pinned: true }, 30);
+    await updateSuggestion(a.c, first.cards[1].id, { dismissed: true }, 30);
+    await admin`update suggestions set expires_at = now() - interval '1 minute' where not pinned`;
+    await purgeExpired(loadConfig().retention.audit_log_days);
+    const left = await listSuggestions(a.c, a.now);
+    expect(left.map((s) => [s.text, s.pinned])).toEqual([["Ask who signs off on hosting.", true]]);
+    expect(await listSuggestions(a.c, a.now, true)).toHaveLength(1);
+    const audit = await admin`select event, count from audit_log where event = 'purge.suggestions'`;
+    expect(audit[0].count).toBe(1);
+  });
+
+  it("keeps cards and their updates inside the client scope", async () => {
+    const { loadConfig } = await import("@/lib/config");
+    const { runLiveCheck } = await import("@/lib/assist/assistant");
+    const { listSuggestions, updateSuggestion } = await import("@/lib/db/live");
+    const a = await clientWithHistory("Acme", "Zanzibar");
+    const b = await clientWithHistory("Beta", "Quokka");
+    const { cards } = await runLiveCheck(loadConfig(), a.c, a.now, [{ speaker: 0, startMs: 0, text: "x" }], "interval",
+      fake({ cards: [{ kind: "question", text: "Ask about hosting.", line: null }] }, []));
+    expect(await listSuggestions(b.c, a.now)).toEqual([]);
+    await expect(updateSuggestion(b.c, cards[0].id, { pinned: true }, 30)).rejects.toThrow(/not found/);
+    await expect(runLiveCheck(loadConfig(), b.c, a.now, [{ speaker: 0, startMs: 0, text: "x" }], "interval", fake({ cards: [] }, []))).rejects.toThrow(/not found/);
+  });
+
+  it("moves unpinned cards onto the meeting end clock when it ends", async () => {
+    const { loadConfig } = await import("@/lib/config");
+    const { runLiveCheck } = await import("@/lib/assist/assistant");
+    const a = await clientWithHistory("Acme", "Zanzibar");
+    await runLiveCheck(loadConfig(), a.c, a.now, [{ speaker: 0, startMs: 0, text: "x" }], "interval",
+      fake({ cards: [{ kind: "question", text: "Ask about hosting.", line: null }] }, []));
+    const end = new Date("2026-01-01T00:00:00Z");
+    await endMeeting(a.c, a.now, 30, end, 30);
+    const [row] = await admin`select expires_at from suggestions`;
+    expect((row.expires_at as Date).toISOString()).toBe("2026-01-31T00:00:00.000Z");
   });
 });

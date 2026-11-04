@@ -70,10 +70,23 @@ const configSchema = z.object({
     max_brief_updates: z.number().int().nonnegative(),
     brief_amendments_in_prompt: z.number().int().nonnegative(),
     max_free_form_tags: z.number().int().nonnegative(),
+    live_effort: z.enum(["low", "medium", "high"]),
+    live_max_tokens: z.number().int().positive(),
+    live_request_timeout_seconds: z.number().positive(),
+    live_min_gap_seconds: z.number().nonnegative(),
+    live_recent_summaries: z.number().int().nonnegative(),
+    live_open_items: z.number().int().nonnegative(),
+    live_card_chars: z.number().int().positive(),
+    live_max_window_chars: z.number().int().positive(),
   }),
   recall: z.object({
     max_context_tokens: z.number().int().positive(),
     recent_summaries: z.number().int().positive(),
+    effort: z.enum(["low", "medium", "high", "xhigh", "max"]),
+    max_tokens: z.number().int().positive(),
+    request_timeout_seconds: z.number().positive(),
+    max_question_chars: z.number().int().positive(),
+    max_items: z.number().int().positive(),
   }),
   owner: z.object({ names: z.array(z.string()) }),
   tags: z.array(z.string()),
@@ -86,6 +99,8 @@ export type Config = z.infer<typeof configSchema>;
 export type CaptureSettings = Pick<Config, "capture" | "stt"> & {
   storage: Pick<Config["storage"], "segment_flush_seconds" | "max_segments_per_post">;
   templates: { key: string; name: string }[];
+  live: { interval_seconds: number; min_gap_seconds: number; window_minutes: number; max_suggestions: number };
+  ownerNames: string[];
 };
 
 export function parseConfig(text: string): Config {
@@ -110,5 +125,12 @@ export function captureSettings(config: Config): CaptureSettings {
       max_segments_per_post: config.storage.max_segments_per_post,
     },
     templates: Object.keys(config.templates).map((key) => ({ key, name: key })),
+    live: {
+      interval_seconds: config.assist.live_interval_seconds,
+      min_gap_seconds: config.assist.live_min_gap_seconds,
+      window_minutes: config.assist.live_transcript_window_minutes,
+      max_suggestions: config.assist.live_max_suggestions,
+    },
+    ownerNames: config.owner.names,
   };
 }

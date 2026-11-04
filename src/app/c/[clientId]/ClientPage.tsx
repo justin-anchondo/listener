@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronRight, Pencil, Plus } from "lucide-react";
+import { ChevronRight, MessageCircleQuestion, Pencil, Plus } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
@@ -8,6 +8,7 @@ import { ClientAvatar } from "@/components/app/client-avatar";
 import { ClientEditSheet } from "@/components/app/edit-sheets";
 import { MeetingRow, type MeetingRowData } from "@/components/app/meeting-row";
 import { PageHeader } from "@/components/app/page-header";
+import { RecallSheet } from "@/components/app/recall-sheet";
 import { Drawer, DrawerContent } from "@/components/ui/drawer";
 import { type Client, loadDirectory, sendJson } from "@/lib/client/directory";
 import { cn } from "@/lib/utils";
@@ -17,6 +18,7 @@ export default function ClientPage({ clientId, logoPixels }: { clientId: string;
   const [client, setClient] = useState<Client | null | undefined>(undefined);
   const [meetings, setMeetings] = useState<MeetingRowData[] | null>(null);
   const [editing, setEditing] = useState(false);
+  const [asking, setAsking] = useState(false);
   const [adding, setAdding] = useState(false);
   const [name, setName] = useState("");
   const [showArchived, setShowArchived] = useState(false);
@@ -46,9 +48,14 @@ export default function ClientPage({ clientId, logoPixels }: { clientId: string;
       <PageHeader
         back={{ href: "/meetings", label: "Meetings" }}
         actions={client && (
-          <button type="button" onClick={() => setEditing(true)} aria-label="Edit client details" className="grid size-10 place-items-center rounded-full text-muted-foreground hover:bg-muted">
-            <Pencil className="size-[18px]" aria-hidden="true" />
-          </button>
+          <>
+            <button type="button" onClick={() => setAsking(true)} aria-label={`Ask about ${client.name}`} className="grid size-10 place-items-center rounded-full text-muted-foreground hover:bg-muted">
+              <MessageCircleQuestion className="size-5" aria-hidden="true" />
+            </button>
+            <button type="button" onClick={() => setEditing(true)} aria-label="Edit client details" className="grid size-10 place-items-center rounded-full text-muted-foreground hover:bg-muted">
+              <Pencil className="size-[18px]" aria-hidden="true" />
+            </button>
+          </>
         )}
       />
       <div className="flex items-center gap-3 px-5 pt-1">
@@ -122,6 +129,7 @@ export default function ClientPage({ clientId, logoPixels }: { clientId: string;
           </form>
         </DrawerContent>
       </Drawer>
+      {client && <RecallSheet open={asking} onClose={() => setAsking(false)} clientId={client.id} clientName={client.name} linkSources />}
     </>
   );
 }

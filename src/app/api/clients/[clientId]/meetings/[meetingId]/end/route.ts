@@ -12,7 +12,8 @@ export async function POST(_request: Request, ctx: { params: Promise<{ clientId:
     await requireSession();
     const { clientId, meetingId } = await ctx.params;
     if (!isUuid(meetingId)) throw new LimitError("meetingId");
-    await endMeeting(assertClientScope(clientId), meetingId.toLowerCase(), loadConfig().retention.transcript_days);
+    const r = loadConfig().retention;
+    await endMeeting(assertClientScope(clientId), meetingId.toLowerCase(), r.transcript_days, new Date(), r.unpinned_suggestion_days);
     return json({ ok: true });
   });
 }

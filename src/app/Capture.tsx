@@ -1,13 +1,15 @@
 "use client";
 
-import { AlertTriangle, ChevronDown, Mic } from "lucide-react";
+import { AlertTriangle, ChevronDown, Mic, MessageCircleQuestion } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ClientAvatar } from "@/components/app/client-avatar";
 import { ClientSheet, useClientSelection } from "@/components/app/client-sheet";
 import { MeetingTypesSheet } from "@/components/app/edit-sheets";
+import { LiveCards, LiveToggle } from "@/components/app/live-cards";
 import { PageHeader } from "@/components/app/page-header";
+import { RecallSheet } from "@/components/app/recall-sheet";
 import { RecorderBar } from "@/components/app/recorder-bar";
 import { SiriOrb } from "@/components/ui/siri-orb";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
@@ -21,6 +23,7 @@ import {
 import { describeCaptureError } from "@/lib/capture/errors";
 import { mergeEntries } from "@/lib/capture/merge";
 import { SegmentUploader, type UploadSegment, type UploaderState } from "@/lib/capture/uploader";
+import { useLiveAssist } from "@/lib/client/live";
 import { clock, dueSummary, localIsoDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -63,6 +66,7 @@ export default function Capture({ settings }: { settings: CaptureSettings }) {
   const [sheetOpen, setSheetOpen] = useState(false);
   const [typesOpen, setTypesOpen] = useState(false);
   const [due, setDue] = useState<{ overdue: number; week: number } | null>(null);
+  const [askOpen, setAskOpen] = useState(false);
   const session = useRef<CaptureSession | null>(null);
   const uploader = useRef<SegmentUploader | null>(null);
   const early = useRef<Omit<UploadSegment, "seq">[]>([]); // segments heard before the meeting record exists
@@ -75,6 +79,7 @@ export default function Capture({ settings }: { settings: CaptureSettings }) {
   const active = status === "starting" || status === "live" || status === "reconnecting" || status === "stalled";
   const finishing = saveState === "finishing";
   const busy = active || finishing;
+  const live = useLiveAssist({ clientId: selection?.clientId ?? null, meetingId, recording: active && !finishing, entries, settings });
 
   useEffect(() => {
     if (!active) return;
@@ -236,7 +241,17 @@ export default function Capture({ settings }: { settings: CaptureSettings }) {
   if (busy) {
     return (
       <div className="flex min-h-dvh flex-col">
-        <PageHeader meta={selection ? `${selection.clientName} · ${selection.projectName}${typeName ? ` · ${typeName}` : ""}` : undefined} />
+        <PageHeader
+          meta={selection ? `${selection.clientName} · ${selection.projectName}${typeName ? ` · ${typeName}` : ""}` : undefined}
+          actions={selection && (
+            <>
+              <LiveToggle enabled={live.enabled} status={live.status} onChange={live.setEnabled} />
+              <button type="button" onClick={() => setAskOpen(true)} aria-label={`Ask about ${selection.clientName}`} className="grid size-10 place-items-center rounded-full text-muted-foreground hover:bg-muted">
+                <MessageCircleQuestion className="size-5" aria-hidden="true" />
+              </button>
+            </>
+          )}
+        />
 
         <div className="flex flex-col gap-2 px-5 pt-2">
           {status === "stalled" && (
@@ -272,6 +287,8 @@ export default function Capture({ settings }: { settings: CaptureSettings }) {
             </dl>
           )}
         </div>
+
+        {live.enabled && <LiveCards cards={live.cards} onPin={live.pin} onDismiss={live.dismiss} />}
 
         <main aria-live="polite" className="flex flex-1 flex-col justify-end gap-4 px-5 pt-4 pb-40">
           {entries.length === 0 && !interim && (
@@ -313,6 +330,9 @@ export default function Capture({ settings }: { settings: CaptureSettings }) {
             <p className="text-xs text-muted-foreground">{saveText}</p>
           </div>
         </div>
+        {selection && (
+          <RecallSheet open={askOpen} onClose={() => setAskOpen(false)} clientId={selection.clientId} clientName={selection.clientName} linkSources={false} />
+        )}
       </div>
     );
   }

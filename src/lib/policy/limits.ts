@@ -105,3 +105,29 @@ export function cleanWatchFor(value: unknown, maxItems: number, maxChars: number
   const list = cleanList(value ?? [], maxItems, maxChars, "watch_for");
   return [...new Set(list.map((s) => s.replace(/\s+/g, " ")))];
 }
+
+export type LiveLine = { speaker: number | null; startMs: number; text: string };
+
+/**
+ * The recent transcript window the phone sends for a live check. Keeps the
+ * newest lines when the total text is over maxTotalChars.
+ */
+export function cleanLiveWindow(value: unknown, maxLines: number, maxLineChars: number, maxTotalChars: number): LiveLine[] {
+  if (!Array.isArray(value) || value.length > maxLines) throw new LimitError("lines");
+  const lines = value.map((raw) => {
+    const l = raw as Partial<LiveLine>;
+    const int = (n: unknown) => typeof n === "number" && Number.isInteger(n) && n >= 0;
+    if (!int(l.startMs) || !(l.speaker === null || l.speaker === undefined || int(l.speaker))) throw new LimitError("lines");
+    if (typeof l.text !== "string" || l.text.length > maxLineChars) throw new LimitError("lines");
+    return { speaker: l.speaker ?? null, startMs: l.startMs!, text: l.text.trim() };
+  }).filter((l) => l.text);
+  let total = 0;
+  let from = lines.length;
+  while (from > 0 && total + lines[from - 1].text.length <= maxTotalChars) total += lines[--from].text.length;
+  return lines.slice(from);
+}
+
+/** A recall question: required, single spaced, bounded. */
+export function cleanQuestion(value: unknown, max: number): string {
+  return cleanName(value, max, "question");
+}

@@ -72,10 +72,23 @@ assist:                             # SPEC 4
   max_brief_updates: 5              # brief amendments the model may add per meeting
   brief_amendments_in_prompt: 40    # most recent active amendments sent with the brief
   max_free_form_tags: 3
+  live_effort: low                  # live cards: fast, thinking off
+  live_max_tokens: 1200
+  live_request_timeout_seconds: 12
+  live_min_gap_seconds: 10          # a trigger can't start a new check sooner than this after the last
+  live_recent_summaries: 3          # earlier meetings on the project the live assistant reads
+  live_open_items: 20               # open action items on the project it reads
+  live_card_chars: 280              # longest card text
+  live_max_window_chars: 40000      # cap on transcript text the phone sends per check
 
 recall:                             # SPEC 4.2, BUILD_PLAN 1
   max_context_tokens: 150000        # above this, reconsider embeddings
   recent_summaries: 20
+  effort: low
+  max_tokens: 2000
+  request_timeout_seconds: 30
+  max_question_chars: 500
+  max_items: 200                    # action items included in recall context
 
 owner:
   names: ["Justin"]                 # how others refer to me; items owned by these count as "mine"

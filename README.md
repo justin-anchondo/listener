@@ -45,7 +45,7 @@ Then redeploy. Passkeys belong to one web address, so always use the stable one.
 ### 3b. Phase 3 additions
 
 1. In Supabase **SQL Editor › + New query**, paste all of `db/migrations/0002_summaries.sql` and run it. Then do the same with `db/migrations/0003_brief_amendments.sql`.
-2. Then run `db/migrations/0004_logos_types_recent.sql` the same way (client logos, editable meeting types, recent meetings list).
+2. Then run `db/migrations/0004_logos_types_recent.sql` the same way (client logos, editable meeting types, recent meetings list), and then `db/migrations/0005_live_suggestions.sql` (live tips).
 3. In Vercel, add `ANTHROPIC_API_KEY` (Secret) with an API key from console.anthropic.com, then redeploy.
 
 ### 4. First sign in
@@ -58,7 +58,9 @@ Three tabs at the bottom: **Record**, **Meetings**, **Open items**. The small su
 
 1. **Record:** tap the client / project pill to choose (or add) a client, project, and meeting type in the sheet that slides up. The pencil next to **Client** opens the client page; the pencil next to **Meeting type** edits the types (name and what to watch for). `config.yaml` only provides the starting types. Your last choice is remembered. Tap the big button to start.
 2. While recording, the transcript fills the screen and the bar at the bottom shows the timer and mic level. Tap **ⓘ** for connection details, **■** to stop.
-3. **Meetings:** recent meetings across clients, with generated title, participants, client, project, and time. Tap a client chip to filter, then **Client page** for that client's projects and meetings. **+ New client** is at the end of the chips. The pencil on a client page edits the name and logo or deletes the client; the pencil on a project page renames or archives it.
+   - **Live tips** appear at the top as one card at a time: something to say, a question to ask, a reminder from earlier meetings, or a brief item that hasn't come up. They update every 30 seconds, and right away when someone asks you a question, a commitment or date comes up, or a brief topic is mentioned. Swipe or use the arrows for older ones, **pin** a card to keep it with the summary, **×** to dismiss. **Tips** at the top turns them on or off (the phone remembers).
+   - **?** opens **Ask**: questions about this client ("what did we agree on pricing?"), answered only from this client's meetings, briefs, and action items, with the meetings it used. It says when the answer isn't there.
+3. **Meetings:** recent meetings across clients, with generated title, participants, client, project, and time. Tap a client chip to filter, then **Client page** for that client's projects and meetings. **+ New client** is at the end of the chips. The **?** on a client page asks about that client (sources link to the meetings). The pencil on a client page edits the name and logo or deletes the client; the pencil on a project page renames or archives it.
 
 After **Stop**, the summary and action items are generated automatically (usually under a minute). Tap **View** to open the meeting:
 
@@ -70,7 +72,7 @@ After **Stop**, the summary and action items are generated automatically (usuall
 
 **Open items** lists everything still open: **All clients** groups by due date (overdue, today, next 7 days, later, no date, snoozed); **By client** groups by client with open and overdue counts. Each item has a due date chip (red overdue, amber due soon); tap it to pick a date. Tap an item to edit it, snooze it a week, or open its meeting.
 
-Transcripts are kept 30 days after the meeting ends, then deleted by a daily job. Summaries and action items are kept. Audio is never stored.
+Transcripts and unpinned live tips are kept 30 days after the meeting ends, then deleted by a daily job. Summaries, action items, and pinned tips are kept. Audio is never stored.
 
 ## Develop locally
 

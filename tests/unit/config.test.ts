@@ -35,7 +35,13 @@ describe("config", () => {
     expect(() => parseConfig(withOverride((c) => delete c.capture))).toThrow();
   });
 
-  it("exposes only capture and stt settings to the browser", () => {
-    expect(Object.keys(captureSettings(parseConfig(raw))).sort()).toEqual(["capture", "storage", "stt", "templates"]);
+  it("exposes only capture, stt, and live timing settings to the browser", () => {
+    const config = parseConfig(raw);
+    const s = captureSettings(config);
+    expect(Object.keys(s).sort()).toEqual(["capture", "live", "ownerNames", "storage", "stt", "templates"]);
+    expect(Object.keys(s.live).sort()).toEqual(["interval_seconds", "max_suggestions", "min_gap_seconds", "window_minutes"]);
+    const sent = JSON.stringify(s);
+    expect(sent).not.toContain(config.models.live);
+    expect(sent).not.toContain(config.models.post);
   });
 });

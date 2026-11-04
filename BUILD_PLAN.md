@@ -148,6 +148,8 @@ Done when: outputs are ready within `assist.post_meeting_timeout_seconds` on a 6
 
 ### Phase 4: Live assistant and recall
 
+Status: built 2026-11-04. Awaiting deployment (migration `0005_live_suggestions`) and the manual latency check on a real call.
+
 - Project brief editor and templates (starting types from `config.yaml`, editable in the app; done early).
 - Live loop on `assist.live_interval_seconds` plus triggers (question to owner, commitment or date mentioned, brief open question mentioned).
 - Suggestion cards with dismiss and pin.
