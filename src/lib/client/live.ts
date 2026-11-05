@@ -125,7 +125,13 @@ export function useLiveAssist({
     if (!res?.ok) setCards((prev) => prev.map((c) => (c.id === card.id ? card : c)));
   }, [clientId]);
 
+  /** Server copy of this meeting's cards (another screen may have pinned or dismissed some). */
+  const syncCards = useCallback((server: LiveCard[]) => {
+    setCards([...server].reverse());
+  }, []);
+
   return {
+    syncCards,
     status: enabled ? status : ("off" as LiveStatus),
     cards: cards.filter((c) => !c.dismissed),
     pin: (c: LiveCard) => update(c, { pinned: !c.pinned }),

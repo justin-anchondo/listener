@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import type { LiveCard } from "@/lib/client/live";
 import { cn } from "@/lib/utils";
 
-const KIND: Record<LiveCard["kind"], { label: string; icon: typeof Lightbulb; tone: string }> = {
+export const KIND: Record<LiveCard["kind"], { label: string; icon: typeof Lightbulb; tone: string }> = {
   talking_point: { label: "Say", icon: Lightbulb, tone: "text-link" },
   question: { label: "Ask", icon: MessageCircleQuestion, tone: "text-emerald-700 dark:text-emerald-300" },
   reminder: { label: "Remember", icon: BellRing, tone: "text-amber-700 dark:text-amber-300" },
@@ -114,5 +114,60 @@ export function LiveToggle({ enabled, status, onChange }: { enabled: boolean; st
       />
       Tips
     </button>
+  );
+}
+
+/** Every card at once, newest first: the desktop Live view's side panel. */
+export function LiveCardList({ cards, onPin, onDismiss, freshIds }: {
+  cards: LiveCard[];
+  onPin: (c: LiveCard) => void;
+  onDismiss: (c: LiveCard) => void;
+  freshIds?: Set<string>;
+}) {
+  const reduced = useReducedMotion();
+  return (
+    <ul aria-label="Live tips" aria-live="polite" className="flex flex-col gap-2.5">
+      <AnimatePresence initial={false}>
+        {cards.map((card) => {
+          const k = KIND[card.kind];
+          const Icon = k.icon;
+          return (
+            <motion.li
+              key={card.id}
+              layout={!reduced}
+              initial={reduced ? false : { opacity: 0, y: -8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={reduced ? undefined : { opacity: 0, x: 24 }}
+              className={cn(
+                "flex items-start gap-3 rounded-xl border bg-card px-4 py-3 shadow-sm transition-colors",
+                card.pinned && "border-link/50",
+                freshIds?.has(card.id) && "ring-2 ring-link/30",
+              )}
+            >
+              <div className="flex min-w-0 flex-1 flex-col gap-1">
+                <span className={cn("flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider", k.tone)}>
+                  <Icon className="size-3.5" aria-hidden="true" /> {k.label}
+                </span>
+                <p className="text-[16px] leading-snug">{card.text}</p>
+              </div>
+              <div className="-mr-2 -mt-1 flex shrink-0 items-center">
+                <button
+                  type="button"
+                  onClick={() => onPin(card)}
+                  aria-pressed={card.pinned}
+                  aria-label={card.pinned ? "Unpin" : "Pin to keep with the summary"}
+                  className={cn("grid size-9 place-items-center rounded-full hover:bg-muted", card.pinned ? "text-link" : "text-muted-foreground")}
+                >
+                  {card.pinned ? <PinOff className="size-4" aria-hidden="true" /> : <Pin className="size-4" aria-hidden="true" />}
+                </button>
+                <button type="button" onClick={() => onDismiss(card)} aria-label="Dismiss" className="grid size-9 place-items-center rounded-full text-muted-foreground hover:bg-muted">
+                  <X className="size-4" aria-hidden="true" />
+                </button>
+              </div>
+            </motion.li>
+          );
+        })}
+      </AnimatePresence>
+    </ul>
   );
 }

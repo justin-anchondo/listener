@@ -39,7 +39,7 @@ describe("config", () => {
     const config = parseConfig(raw);
     const s = captureSettings(config);
     expect(Object.keys(s).sort()).toEqual(["capture", "live", "ownerNames", "storage", "stt", "templates"]);
-    expect(Object.keys(s.live).sort()).toEqual(["interval_seconds", "max_suggestions", "min_gap_seconds", "window_minutes"]);
+    expect(Object.keys(s.live).sort()).toEqual(["follow_poll_seconds", "interval_seconds", "max_suggestions", "min_gap_seconds", "window_minutes"]);
     const sent = JSON.stringify(s);
     expect(sent).not.toContain(config.models.live);
     expect(sent).not.toContain(config.models.post);

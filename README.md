@@ -45,7 +45,7 @@ Then redeploy. Passkeys belong to one web address, so always use the stable one.
 ### 3b. Phase 3 additions
 
 1. In Supabase **SQL Editor › + New query**, paste all of `db/migrations/0002_summaries.sql` and run it. Then do the same with `db/migrations/0003_brief_amendments.sql`.
-2. Then run `db/migrations/0004_logos_types_recent.sql` the same way (client logos, editable meeting types, recent meetings list), and then `db/migrations/0005_live_suggestions.sql` (live tips).
+2. Then run `db/migrations/0004_logos_types_recent.sql` the same way (client logos, editable meeting types, recent meetings list), then `db/migrations/0005_live_suggestions.sql` (live tips), and then `db/migrations/0006_live_follow.sql` (desktop live view).
 3. In Vercel, add `ANTHROPIC_API_KEY` (Secret) with an API key from console.anthropic.com, then redeploy.
 
 ### 4. First sign in
@@ -68,6 +68,8 @@ After **Stop**, the summary and action items are generated automatically (usuall
 - Under **Speakers**, name the people on the call and pick which one is **Me**, then **Regenerate** for feedback on your own talk time.
 - **Edit summary** saves a new version. Earlier versions are kept.
 - **Merge** (the icon at the top right) joins this meeting with another recording of the same call, for when you got disconnected and started again. It lists this client's recordings within a few hours (config `storage.merge_window_hours`). The two become one meeting under the earlier recording, the transcript is joined in order, and the summary is rebuilt. Completed and edited action items, pinned tips, and brief notes carry over. Both transcripts must still be kept (30 days).
+
+**Desktop live view:** keep recording on the phone, and open `/live` (or **Live view** at the top of the Record screen on a computer) in a desktop browser. To sign in there, choose your browser's **Use a phone or tablet** option, scan the QR code with the iPhone, and approve with Face ID (the computer needs Bluetooth on). The page picks up the recording within a few seconds and shows the transcript on the left and live tips on the right. **Live tips on/off** works from either screen; pins and dismissals sync both ways. **Ask** works here too. **Alerts** turns on desktop notifications for new tips (they can show on a shared screen, so leave them off when presenting).
 
 **Project brief:** open a project (Meetings tab) to write its brief. After each meeting, new lasting facts are added under **Updates** with the date and a link to the meeting. Your brief itself is never changed automatically. Dismiss an update with **×** (it stays in the history and can be restored), or add your own with **+ Note**.
 

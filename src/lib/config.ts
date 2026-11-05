@@ -80,6 +80,9 @@ const configSchema = z.object({
     live_open_items: z.number().int().nonnegative(),
     live_card_chars: z.number().int().positive(),
     live_max_window_chars: z.number().int().positive(),
+    follow_poll_seconds: z.number().positive(),
+    follow_active_hours: z.number().positive(),
+    follow_max_segments: z.number().int().positive(),
   }),
   recall: z.object({
     max_context_tokens: z.number().int().positive(),
@@ -101,7 +104,7 @@ export type Config = z.infer<typeof configSchema>;
 export type CaptureSettings = Pick<Config, "capture" | "stt"> & {
   storage: Pick<Config["storage"], "segment_flush_seconds" | "max_segments_per_post">;
   templates: { key: string; name: string }[];
-  live: { interval_seconds: number; min_gap_seconds: number; window_minutes: number; max_suggestions: number };
+  live: { interval_seconds: number; min_gap_seconds: number; window_minutes: number; max_suggestions: number; follow_poll_seconds: number };
   ownerNames: string[];
 };
 
@@ -132,6 +135,7 @@ export function captureSettings(config: Config): CaptureSettings {
       min_gap_seconds: config.assist.live_min_gap_seconds,
       window_minutes: config.assist.live_transcript_window_minutes,
       max_suggestions: config.assist.live_max_suggestions,
+      follow_poll_seconds: config.assist.follow_poll_seconds,
     },
     ownerNames: config.owner.names,
   };

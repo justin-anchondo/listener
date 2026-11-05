@@ -87,6 +87,14 @@ Confidentiality outranks convenience. When a feature and the security rules in s
 - Recall searches only the current client's data: summaries, action items, project briefs, and transcripts still inside the retention window.
 - Answers cite the meeting and date they came from. If the answer is not in the data, the assistant says so rather than guessing.
 
+### 4.5 Second screen (desktop live view)
+
+- The phone stays the only microphone. A signed in desktop browser can follow a meeting while it records: transcript, live tips, and Ask, side by side.
+- The desktop reads only what the phone already saves (transcript segments and live cards) through the same client scoped routes, polling on `assist.follow_poll_seconds`. Live tips on or off is stored on the meeting, so either screen can switch it; the phone runs the checks.
+- Finding the running meeting uses the recent meetings view (client and project names and times only).
+- Desktop alerts for new tips are off by default and opt in per browser; the owner is told they can appear on a shared screen.
+- Desktop sign in uses the owner's existing passkey through the browser's "use a phone" option. No new sign in method is added.
+
 ### 4.3 Post meeting outputs
 
 Generated when the owner taps End, in this order:
@@ -148,7 +156,7 @@ Rules:
 
 - Every table holding client data carries `client_id`. Every query filters on it, enforced in the data access layer and by database policy.
 - The client and project picker may list all clients and projects (names only). It is the second cross client view, alongside consolidated open items.
-- The recent meetings list may show meetings across clients: title, participants, client, project, date, and open item count. It never shows transcript, summary body, or brief text, and is never sent to a model. It is the third cross client view.
+- The recent meetings list, including the "running now" lookup for the desktop live view, may show meetings across clients: title, participants, client, project, date, and open item count. It never shows transcript, summary body, or brief text, and is never sent to a model. It is the third cross client view.
 - Prompts sent to the model contain data from exactly one client. The consolidated open items view is built from action item fields and is never sent to a model with other clients' data in the same request.
 
 ### 6.4 Vendors and keys

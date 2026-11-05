@@ -734,3 +734,66 @@ describe.skipIf(!run)("merging meetings", () => {
     expect(await admin`select id from transcript_segments where meeting_id = ${theirs}`).toHaveLength(1);
   });
 });
+
+describe.skipIf(!run)("following a live meeting from a second screen", () => {
+  let app: postgres.Sql;
+  let admin: postgres.Sql;
+  const seg = (seq: number, text: string) => ({ seq, speaker: seq % 2, startMs: seq * 3000, endMs: seq * 3000 + 2500, text });
+
+  beforeAll(() => {
+    process.env.LISTENER_MASTER_KEY = randomBytes(32).toString("base64");
+    app = postgres(appUrl!, { prepare: false, max: 2 });
+    admin = postgres(adminUrl!, { max: 1, onnotice: () => undefined, connection: { search_path: "listener" } });
+    setDbForTests(app);
+  });
+
+  afterAll(async () => {
+    setDbForTests(undefined);
+    await app.end();
+    await admin.end();
+  });
+
+  beforeEach(async () => {
+    await admin`truncate clients, projects, meetings, transcript_segments, passkeys, audit_log, summaries, action_items, brief_amendments, meeting_types, suggestions cascade`;
+  });
+
+  it("lists only running meetings with names, and serves new lines and cards after a cursor", async () => {
+    const { listActiveMeetings } = await import("@/lib/db/recent");
+    const { loadFollowState, saveSuggestions, setLiveTips } = await import("@/lib/db/live");
+    const c = await createClient("Cloudflare");
+    const p = await createProject(c, "OGP");
+    const live = await startMeeting(c, p, "general", true);
+    const done = await startMeeting(c, p, "general");
+    await endMeeting(c, done, 30);
+    const old = await startMeeting(c, p, "general");
+    await admin`update meetings set started_at = now() - interval '9 hours' where id = ${old}`;
+
+    const active = await listActiveMeetings(new Date(), 6);
+    expect(active.map((m) => [m.id, m.clientName, m.projectName, m.liveTips])).toEqual([[live, "Cloudflare", "OGP", true]]);
+    expect(Object.keys(active[0]).sort()).toEqual(["clientId", "clientName", "id", "liveTips", "logoVersion", "projectName", "startedAt", "template"]);
+
+    await saveSegments(c, live, [seg(0, "Hello"), seg(1, "Budget first"), seg(2, "Then timeline")], 30);
+    await saveSuggestions(c, live, [{ kind: "question", text: "Ask about the timeline.", sourceMs: null }], 30);
+    const first = await loadFollowState(c, live, -1, 2);
+    expect(first.segments.map((s) => [s.seq, s.text])).toEqual([[0, "Hello"], [1, "Budget first"]]);
+    expect(first.suggestions.map((s) => s.text)).toEqual(["Ask about the timeline."]);
+    expect(first.meeting.liveTips).toBe(true);
+    const next = await loadFollowState(c, live, 1, 2);
+    expect(next.segments.map((s) => s.text)).toEqual(["Then timeline"]);
+
+    await setLiveTips(c, live, false);
+    expect((await loadFollowState(c, live, 2, 10)).meeting.liveTips).toBe(false);
+  });
+
+  it("never serves or changes another client's meeting", async () => {
+    const { loadFollowState, setLiveTips } = await import("@/lib/db/live");
+    const a = await createClient("Acme");
+    const m = await startMeeting(a, await createProject(a, "P"), "general");
+    await saveSegments(a, m, [seg(0, "Acme secret")], 30);
+    const b = await createClient("Beta");
+    await expect(loadFollowState(b, m, -1, 10)).rejects.toThrow(/not found/);
+    await expect(setLiveTips(b, m, true)).rejects.toThrow(/not found/);
+    const [row] = await admin`select live_tips from meetings where id = ${m}`;
+    expect(row.live_tips).toBe(false);
+  });
+});

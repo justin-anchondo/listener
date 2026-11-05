@@ -9,11 +9,11 @@ import { computeExpiresAt } from "@/lib/policy/retention";
 
 const SEGMENT_TEXT = "transcript_segments.text";
 
-export async function startMeeting(clientId: string, projectId: string, template: string): Promise<string> {
+export async function startMeeting(clientId: string, projectId: string, template: string, liveTips = false): Promise<string> {
   const meetingId = randomUUID();
   await withClient(clientId, async (tx, id) => {
     // The composite foreign key rejects a project that belongs to another client.
-    await tx`insert into meetings (id, client_id, project_id, template) values (${meetingId}, ${id}, ${projectId}, ${template})`;
+    await tx`insert into meetings (id, client_id, project_id, template, live_tips) values (${meetingId}, ${id}, ${projectId}, ${template}, ${liveTips})`;
     await audit(tx, "meeting.started", { clientId: id, objectId: meetingId });
   });
   return meetingId;

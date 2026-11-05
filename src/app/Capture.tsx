@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, ChevronDown, MessageCircleQuestion, Mic, Sparkles } from "lucide-react";
+import { AlertTriangle, ChevronDown, MessageCircleQuestion, Mic, MonitorPlay, Sparkles } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -23,9 +23,13 @@ import {
 import { describeCaptureError } from "@/lib/capture/errors";
 import { mergeEntries } from "@/lib/capture/merge";
 import { SegmentUploader, type UploadSegment, type UploaderState } from "@/lib/capture/uploader";
-import { useLiveAssist } from "@/lib/client/live";
+import { sendJson } from "@/lib/client/directory";
+import { type LiveCard, useLiveAssist } from "@/lib/client/live";
 import { clock, dueSummary, localIsoDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
+
+// The phone already has its own transcript; when polling it asks for state and cards only.
+const FOLLOW_NO_LINES = 2_147_483_647;
 
 type SaveState = "off" | "starting" | "saving" | "finishing" | "saved" | "failed";
 type SummaryState = { state: "idle" } | { state: "working" } | { state: "ready"; href: string } | { state: "failed"; message: string; href: string };
@@ -81,6 +85,31 @@ export default function Capture({ settings }: { settings: CaptureSettings }) {
   const finishing = saveState === "finishing";
   const busy = active || finishing;
   const live = useLiveAssist({ clientId: selection?.clientId ?? null, meetingId, recording: active && !finishing, enabled: liveOn, entries, settings });
+
+  // Live tips on/off and the card list are shared with any screen following
+  // this meeting; a local toggle wins over the server for one poll round.
+  const localToggleAt = useRef(0);
+  const changeLiveTips = useCallback((on: boolean) => {
+    setLiveOn(on);
+    localToggleAt.current = Date.now();
+    if (selection && meetingId) void sendJson(`/api/clients/${selection.clientId}/meetings/${meetingId}/live-tips`, "PATCH", { on }).catch(() => undefined);
+  }, [selection, meetingId]);
+  const { syncCards } = live;
+  useEffect(() => {
+    if (!active || !selection || !meetingId) return;
+    const pollMs = settings.live.follow_poll_seconds * 1000;
+    const t = setInterval(() => {
+      void fetch(`/api/clients/${selection.clientId}/meetings/${meetingId}/follow?after=${FOLLOW_NO_LINES}`, { cache: "no-store" })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((s: { meeting: { liveTips: boolean }; suggestions: LiveCard[] } | null) => {
+          if (!s) return;
+          if (Date.now() - localToggleAt.current > pollMs * 2) setLiveOn(s.meeting.liveTips);
+          syncCards(s.suggestions);
+        })
+        .catch(() => undefined);
+    }, pollMs);
+    return () => clearInterval(t);
+  }, [active, selection, meetingId, settings.live.follow_poll_seconds, syncCards]);
 
   // Each meeting starts with live tips off unless turned on for it.
   const wasBusy = useRef(false);
@@ -174,7 +203,7 @@ export default function Capture({ settings }: { settings: CaptureSettings }) {
 
     const sel = selection;
     setSaveState("starting");
-    void createMeeting(sel).then((id) => {
+    void createMeeting(sel, liveOn).then((id) => {
       if (!id) {
         setSaveState("failed");
         return;
@@ -255,7 +284,7 @@ export default function Capture({ settings }: { settings: CaptureSettings }) {
             meta={selection ? `${selection.clientName} · ${selection.projectName}${typeName ? ` · ${typeName}` : ""}` : undefined}
             actions={selection && (
               <>
-                <LiveToggle enabled={liveOn} status={live.status} onChange={setLiveOn} />
+                <LiveToggle enabled={liveOn} status={live.status} onChange={changeLiveTips} />
                 <button type="button" onClick={() => setAskOpen(true)} aria-label={`Ask about ${selection.clientName}`} className="grid size-10 place-items-center rounded-full text-muted-foreground hover:bg-muted">
                   <MessageCircleQuestion className="size-5" aria-hidden="true" />
                 </button>
@@ -350,7 +379,16 @@ export default function Capture({ settings }: { settings: CaptureSettings }) {
   // ---------- Ready ----------
   return (
     <>
-      <PageHeader actions={<ThemeToggle />} />
+      <PageHeader
+        actions={
+          <>
+            <Link href="/live" className="hidden min-h-9 items-center gap-1.5 rounded-full border px-3 text-[13px] text-muted-foreground hover:bg-muted lg:flex">
+              <MonitorPlay className="size-4" aria-hidden="true" /> Live view
+            </Link>
+            <ThemeToggle />
+          </>
+        }
+      />
       <main className="flex flex-1 flex-col items-center justify-center gap-9 px-5 py-6">
         {status === "error" && <div className="w-full"><Banner>{describeCaptureError(detail)}</Banner></div>}
         {dirError && <div className="w-full"><Banner>{dirError}</Banner></div>}
@@ -463,12 +501,12 @@ export default function Capture({ settings }: { settings: CaptureSettings }) {
   );
 }
 
-async function createMeeting(sel: { clientId: string; projectId: string; template: string }): Promise<string | null> {
+async function createMeeting(sel: { clientId: string; projectId: string; template: string }, liveTips: boolean): Promise<string | null> {
   try {
     const res = await fetch(`/api/clients/${sel.clientId}/meetings`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ projectId: sel.projectId, template: sel.template }),
+      body: JSON.stringify({ projectId: sel.projectId, template: sel.template, liveTips }),
     });
     if (!res.ok) return null;
     return ((await res.json()) as { id: string }).id;

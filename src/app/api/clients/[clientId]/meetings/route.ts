@@ -17,7 +17,8 @@ export async function POST(request: Request, ctx: { params: Promise<{ clientId: 
     const types = await listMeetingTypes(loadConfig().templates);
     const template = typeof body.template === "string" ? body.template : types[0]?.key;
     if (!types.some((t) => t.key === template)) throw new LimitError("template");
-    const id = await startMeeting(clientId, body.projectId.toLowerCase(), template);
+    if (body.liveTips !== undefined && typeof body.liveTips !== "boolean") throw new LimitError("liveTips");
+    const id = await startMeeting(clientId, body.projectId.toLowerCase(), template, body.liveTips === true);
     return json({ id }, 201);
   });
 }

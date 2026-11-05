@@ -271,3 +271,48 @@ export async function loadRecallContext(
     };
   });
 }
+
+export type FollowSegment = { seq: number; speaker: number | null; startMs: number; endMs: number; text: string };
+
+export type FollowState = {
+  meeting: { startedAt: Date; endedAt: Date | null; liveTips: boolean };
+  segments: FollowSegment[];
+  suggestions: Suggestion[];
+};
+
+/**
+ * What a second screen needs to follow a meeting: its state, transcript
+ * lines after afterSeq (capped), and its live cards. One client's scope.
+ */
+export async function loadFollowState(clientId: string, meetingId: string, afterSeq: number, limit: number): Promise<FollowState> {
+  return withClient(clientId, async (tx, id) => {
+    const [m] = await tx<{ started_at: Date; ended_at: Date | null; live_tips: boolean }[]>`
+      select started_at, ended_at, live_tips from meetings where id = ${meetingId}`;
+    if (!m) throw new NotFoundError("meeting");
+    const segs = await tx<{ id: string; seq: number; speaker: number | null; start_ms: number; end_ms: number; text_enc: string }[]>`
+      select id, seq, speaker, start_ms, end_ms, text_enc from transcript_segments
+      where meeting_id = ${meetingId} and seq > ${afterSeq} order by seq limit ${limit}`;
+    const cards = await tx<{ id: string; kind: SuggestionKind; text_enc: string; source_ms: number | null; pinned: boolean; dismissed: boolean; created_at: Date }[]>`
+      select id, kind, text_enc, source_ms, pinned, dismissed, created_at from suggestions where meeting_id = ${meetingId} order by created_at`;
+    const dek = segs.length || cards.length ? await clientKey(tx, id) : null;
+    return {
+      meeting: { startedAt: m.started_at, endedAt: m.ended_at, liveTips: m.live_tips },
+      segments: segs.map((s) => ({
+        seq: s.seq, speaker: s.speaker, startMs: s.start_ms, endMs: s.end_ms,
+        text: decryptField(dek!, { clientId: id, column: "transcript_segments.text", rowId: s.id }, s.text_enc),
+      })),
+      suggestions: cards.map((r) => ({
+        id: r.id, kind: r.kind, sourceMs: r.source_ms, pinned: r.pinned, dismissed: r.dismissed, createdAt: r.created_at,
+        text: decryptField(dek!, { clientId: id, column: SUGGESTION_TEXT, rowId: r.id }, r.text_enc),
+      })),
+    };
+  });
+}
+
+/** Turns live tips on or off for one meeting; the recording phone picks it up. */
+export async function setLiveTips(clientId: string, meetingId: string, on: boolean): Promise<void> {
+  await withClient(clientId, async (tx) => {
+    const rows = await tx`update meetings set live_tips = ${on} where id = ${meetingId} returning id`;
+    if (rows.length === 0) throw new NotFoundError("meeting");
+  });
+}

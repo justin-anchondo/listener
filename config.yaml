@@ -22,7 +22,7 @@ access_gate:                        # SPEC 6.1: the access code only enrolls the
   min_code_length: 12               # LISTENER_ACCESS_CODE shorter than this -> enrollment refused
 
 storage:                            # SPEC 3.3
-  segment_flush_seconds: 5          # phone sends final segments to the server this often
+  segment_flush_seconds: 2          # phone sends final segments to the server this often (a desktop follows from these)
   max_segments_per_post: 200
   max_segment_chars: 5000
   max_name_chars: 120               # client and project names
@@ -82,6 +82,9 @@ assist:                             # SPEC 4
   live_open_items: 20               # open action items on the project it reads
   live_card_chars: 280              # longest card text
   live_max_window_chars: 40000      # cap on transcript text the phone sends per check
+  follow_poll_seconds: 2            # how often a second screen asks for new lines and tips
+  follow_active_hours: 6            # a running meeting older than this isn't offered to follow
+  follow_max_segments: 500          # lines returned per follow request
 
 recall:                             # SPEC 4.2, BUILD_PLAN 1
   max_context_tokens: 150000        # above this, reconsider embeddings
