@@ -13,7 +13,10 @@ export async function startMeeting(clientId: string, projectId: string, template
   const meetingId = randomUUID();
   await withClient(clientId, async (tx, id) => {
     // The composite foreign key rejects a project that belongs to another client.
-    await tx`insert into meetings (id, client_id, project_id, template, live_tips) values (${meetingId}, ${id}, ${projectId}, ${template}, ${liveTips})`;
+    await tx`insert into meetings (id, client_id, project_id, template) values (${meetingId}, ${id}, ${projectId}, ${template})`;
+    // Set separately inside a savepoint so recording still starts on a database
+    // that doesn't have migration 0006 yet; live tips just stay off there.
+    if (liveTips) await tx.savepoint((sp) => sp`update meetings set live_tips = true where id = ${meetingId}`).catch(() => undefined);
     await audit(tx, "meeting.started", { clientId: id, objectId: meetingId });
   });
   return meetingId;
