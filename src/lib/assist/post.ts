@@ -74,6 +74,7 @@ export async function summarizeMeeting(
 
   const clean = cleanOutput(output, prompt.lineMs, {
     maxListItems: config.assist.max_list_items,
+    maxActionItems: config.assist.max_action_items,
     maxItemChars: config.assist.max_item_chars,
     maxFreeTags: config.assist.max_free_form_tags,
     allowedTags: config.tags,

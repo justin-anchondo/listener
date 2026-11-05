@@ -66,6 +66,7 @@ const configSchema = z.object({
     post_effort: z.enum(["low", "medium", "high", "xhigh", "max"]),
     post_max_tokens: z.number().int().positive(),
     max_list_items: z.number().int().positive(),
+    max_action_items: z.number().int().positive(),
     max_item_chars: z.number().int().positive(),
     transcript_merge_gap_seconds: z.number().nonnegative(),
     max_brief_updates: z.number().int().nonnegative(),

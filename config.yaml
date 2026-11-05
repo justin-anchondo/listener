@@ -67,7 +67,8 @@ assist:                             # SPEC 4
   post_request_timeout_seconds: 240 # hard ceiling on one model call
   post_effort: medium               # low | medium | high | xhigh | max
   post_max_tokens: 16000
-  max_list_items: 30                # per list in a summary (points, decisions, quotes, items)
+  max_list_items: 30                # per list in a summary (points, decisions, quotes)
+  max_action_items: 8               # action items kept from one meeting; the prompt asks for fewer
   max_item_chars: 2000              # per entry in those lists
   transcript_merge_gap_seconds: 8   # same speaker lines closer than this go to the model as one line
   max_brief_updates: 5              # brief amendments the model may add per meeting

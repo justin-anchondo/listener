@@ -7,7 +7,7 @@ import { z } from "zod";
 
 export const ActionItemOut = z.object({
   title: z.string().describe("What needs to happen, as a short imperative sentence"),
-  owner: z.enum(["me", "them", "unknown"]).describe("me = the Listener owner; them = someone else on the call"),
+  owner: z.enum(["me", "them", "unknown"]).describe("me = only the Listener owner, when they clearly committed or agreed; them = someone else on the call; unknown = not clear who"),
   owner_name: z.string().nullable().describe("Name of the owner if stated, otherwise null"),
   due_date: z.string().nullable().describe("YYYY-MM-DD if a date or day was stated, otherwise null"),
   source_line: z.number().int().describe("Line number in the transcript where this was said"),
@@ -78,6 +78,8 @@ export type CleanLimits = {
   maxBriefUpdates?: number;
   /** Amendment texts already on the project (active or dismissed); repeats are dropped. */
   knownBriefTexts?: string[];
+  /** Action items kept from one meeting (defaults to maxListItems). */
+  maxActionItems?: number;
   /** The owner's names; items assigned to them are stored as "Me". */
   ownerNames?: string[];
 };
@@ -90,13 +92,19 @@ const STOP = new Set(["the", "a", "an", "to", "for", "of", "and", "on", "with", 
 const taskWords = (t: string) => new Set(normalizeText(t).split(" ").filter((w) => w && !STOP.has(w)));
 
 /**
- * Two action items are the same task when their titles match after
- * normalizing, or when they share an owner (or one has none) and nearly all
- * of their meaningful words.
+ * Two action items are the same task when their owners don't conflict and
+ * their titles match after normalizing or share nearly all meaningful words.
+ * Owners conflict when both name different people, or one is the owner
+ * ("Me") and the other someone else ("Them"), so a merge can never move
+ * someone else's task onto the owner.
  */
 export function sameTask(a: { title: string; owner: string | null }, b: { title: string; owner: string | null }): boolean {
+  if (a.owner && b.owner && a.owner !== b.owner) {
+    const named = (o: string) => o !== "Them";
+    if (named(a.owner) && named(b.owner)) return false;
+    if (a.owner === "Me" || b.owner === "Me") return false;
+  }
   if (normalizeText(a.title) === normalizeText(b.title)) return true;
-  if (a.owner && b.owner && a.owner !== b.owner && a.owner !== "Them" && b.owner !== "Them") return false;
   const wa = taskWords(a.title);
   const wb = taskWords(b.title);
   if (wa.size === 0 || wb.size === 0) return false;
@@ -176,15 +184,16 @@ export function cleanOutput(
     .reduce<CleanActionItem[]>((kept, a) => {
       // The same task often comes back twice (once as "me", once by the owner's
       // name, or reworded). Keep the first, filling in a missing date or owner.
+      // Copies from two different people are never merged (sameTask).
       const twin = kept.find((k) => sameTask(k, a));
       if (!twin) kept.push(a);
       else {
         twin.dueDate ??= a.dueDate;
-        if (!twin.owner || twin.owner === "Them") twin.owner = a.owner ?? twin.owner;
+        if (!twin.owner || (twin.owner === "Them" && a.owner !== "Me")) twin.owner = a.owner ?? twin.owner;
       }
       return kept;
     }, [])
-    .slice(0, l.maxListItems);
+    .slice(0, l.maxActionItems ?? l.maxListItems);
 
   const known = new Set((l.knownBriefTexts ?? []).map(normalizeText));
   const briefUpdates: string[] = [];
