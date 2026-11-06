@@ -3,6 +3,7 @@
 import { startAuthentication, startRegistration } from "@simplewebauthn/browser";
 import { Mic } from "lucide-react";
 import { useEffect, useState } from "react";
+import { isDesktopBrowser } from "@/lib/device";
 import { PairPanel } from "./PairPanel";
 
 type Mode = "loading" | "signin" | "pair" | "setup" | "error";
@@ -24,7 +25,16 @@ export default function SignIn() {
   useEffect(() => {
     fetch("/api/auth/status", { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
-      .then((s: { setUp: boolean }) => setMode(s.setUp ? "signin" : "setup"))
+      .then((s: { setUp: boolean }) => {
+        if (!s.setUp) return setMode("setup");
+        // Computers go straight to approving from the phone; phones use their own Face ID.
+        const desktop = isDesktopBrowser({
+          userAgent: navigator.userAgent,
+          maxTouchPoints: navigator.maxTouchPoints ?? 0,
+          finePointer: window.matchMedia("(pointer: fine)").matches,
+        });
+        setMode(desktop ? "pair" : "signin");
+      })
       .catch(() => setMode("error"));
   }, []);
 
@@ -80,12 +90,9 @@ export default function SignIn() {
           <button type="button" onClick={signIn} disabled={busy} className="min-h-12 rounded-xl bg-primary text-[15px] font-semibold text-primary-foreground disabled:opacity-50">
             {busy ? "Waiting for Face ID…" : "Sign in with Face ID"}
           </button>
-          <button type="button" onClick={() => { setMessage(null); setMode("pair"); }} className="min-h-12 rounded-xl border text-[15px] font-medium">
-            On a computer? Sign in with your phone
-          </button>
         </div>
       )}
-      {mode === "pair" && <PairPanel onCancel={() => setMode("signin")} />}
+      {mode === "pair" && <PairPanel onUsePasskey={() => setMode("signin")} />}
       {mode === "setup" && (
         <form onSubmit={setUp} className="flex flex-col gap-3">
           <p className="text-[15px] text-muted-foreground">First time here. Enter your access code to set up Face ID sign in on this device.</p>
