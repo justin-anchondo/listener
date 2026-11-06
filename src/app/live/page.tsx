@@ -1,3 +1,4 @@
+import { AppShell } from "@/components/app/app-shell";
 import { requirePageSession } from "@/lib/auth/guard";
 import { captureSettings, loadConfig } from "@/lib/config";
 import LiveFollow from "./LiveFollow";
@@ -8,5 +9,9 @@ export const dynamic = "force-dynamic";
 export default async function LivePage() {
   await requirePageSession();
   const s = captureSettings(loadConfig());
-  return <LiveFollow pollSeconds={s.live.follow_poll_seconds} mergeGapSeconds={s.capture.merge_gap_seconds} />;
+  return (
+    <AppShell wide>
+      <LiveFollow pollSeconds={s.live.follow_poll_seconds} mergeGapSeconds={s.capture.merge_gap_seconds} />
+    </AppShell>
+  );
 }

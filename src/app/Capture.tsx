@@ -25,6 +25,8 @@ import { mergeEntries } from "@/lib/capture/merge";
 import { SegmentUploader, type UploadSegment, type UploaderState } from "@/lib/capture/uploader";
 import { sendJson } from "@/lib/client/directory";
 import { type LiveCard, useLiveAssist } from "@/lib/client/live";
+import { isDesktopBrowser } from "@/lib/device";
+import { useRouter } from "next/navigation";
 import { clock, dueSummary, localIsoDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -80,6 +82,14 @@ export default function Capture({ settings }: { settings: CaptureSettings }) {
   const bottom = useRef<HTMLDivElement>(null);
 
   const { clients, types, selection, error: dirError, refresh, choose } = useClientSelection(settings.templates);
+
+  // On a computer the phone is the microphone, so home is the live view.
+  const router = useRouter();
+  useEffect(() => {
+    if (isDesktopBrowser({ userAgent: navigator.userAgent, maxTouchPoints: navigator.maxTouchPoints ?? 0, finePointer: window.matchMedia("(pointer: fine)").matches })) {
+      router.replace("/live");
+    }
+  }, [router]);
 
   const active = status === "starting" || status === "live" || status === "reconnecting" || status === "stalled";
   const finishing = saveState === "finishing";

@@ -63,10 +63,10 @@ export default function ClientPage({ clientId, logoPixels }: { clientId: string;
         <h1 className="min-w-0 truncate text-[26px] font-bold tracking-tight">{client?.name ?? " "}</h1>
       </div>
 
-      <main className="flex flex-col gap-6 px-5 pt-5 pb-6">
-        {error && <p className="text-sm text-destructive" role="alert">{error}</p>}
+      <main className="flex flex-col gap-6 px-5 pt-5 pb-6 lg:grid lg:grid-cols-[320px_minmax(0,1fr)] lg:items-start lg:gap-10">
+        {error && <p className="text-sm text-destructive lg:col-span-2" role="alert">{error}</p>}
 
-        <section className="flex flex-col gap-2">
+        <section className="flex flex-col gap-2 lg:sticky lg:top-6">
           <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Projects</h2>
           <ul className="overflow-hidden rounded-xl bg-surface">
             {projects.map((p) => (

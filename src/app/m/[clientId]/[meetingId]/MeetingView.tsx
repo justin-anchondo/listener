@@ -6,6 +6,7 @@ import { useCallback, useEffect, useState } from "react";
 import { type ItemPatch, ItemRow, ItemSheet, type SheetItem, useUndoDelete } from "@/components/app/items";
 import { MergeSheet } from "@/components/app/merge-sheet";
 import { PageHeader } from "@/components/app/page-header";
+import { useWideScreen } from "@/lib/client/media";
 import { Drawer, DrawerContent } from "@/components/ui/drawer";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import type { SummaryContentT } from "@/lib/assist/schema";
@@ -91,6 +92,10 @@ export default function MeetingView({ clientId, meetingId, allowedTags }: { clie
   const [generating, setGenerating] = useState(false);
   const [tab, setTab] = useState<Tab>("summary");
   const [merging, setMerging] = useState(false);
+  const wide = useWideScreen();
+  useEffect(() => {
+    if (wide && tab === "actions") setTab("summary");
+  }, [wide, tab]);
   const [pinned, setPinned] = useState<{ id: string; kind: string; text: string }[]>([]);
 
   useEffect(() => {
@@ -168,6 +173,34 @@ export default function MeetingView({ clientId, meetingId, allowedTags }: { clie
     context: openItem.sourceMs !== null ? `Said at ${clock(openItem.sourceMs / 1000)}` : undefined,
   };
 
+  const actionsSection = (
+          <section className="flex flex-col">
+            {items.length === 0 && <p className="text-[15px] text-muted-foreground">No action items.</p>}
+            <ul>
+              {items.map((item) => (
+                <ItemRow
+                  key={item.id}
+                  item={{
+                    id: item.id,
+                    title: item.title,
+                    sub: [item.owner ?? "No owner", item.sourceMs !== null ? `said at ${clock(item.sourceMs / 1000)}` : null].filter(Boolean).join(" · "),
+                    dueDate: item.dueDate,
+                    done: item.status === "done",
+                  }}
+                  onToggle={() => patchItem(item, { status: item.status === "done" ? "open" : "done" })}
+                  onDue={(date) => patchItem(item, { dueDate: date })}
+                  onOpen={() => setOpenItem(item)}
+                  onDelete={() => undoDelete.remove(item)}
+                />
+              ))}
+            </ul>
+            {items.length > 0 && <p className="mt-3 text-xs text-muted-foreground [@media(pointer:fine)]:hidden">Swipe left to delete · hold to edit</p>}
+            <button type="button" onClick={addItem} className="mt-2 flex min-h-11 items-center gap-1.5 self-start text-[15px] font-semibold text-link">
+              <Plus className="size-4" aria-hidden="true" /> Add action item
+            </button>
+          </section>
+  );
+
   return (
     <>
       <PageHeader
@@ -191,6 +224,8 @@ export default function MeetingView({ clientId, meetingId, allowedTags }: { clie
         }}
       />
 
+      <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start lg:gap-8">
+      <div>
       <div className="px-5 pt-4">
         <SegmentedControl<Tab>
           kind="tabs"
@@ -201,7 +236,7 @@ export default function MeetingView({ clientId, meetingId, allowedTags }: { clie
           onChange={setTab}
           options={[
             { value: "summary", label: "Summary" },
-            { value: "actions", label: "Actions", count: openCount || undefined },
+            ...(wide ? [] : [{ value: "actions" as Tab, label: "Actions", count: openCount || undefined }]),
             { value: "feedback", label: "Feedback" },
             { value: "transcript", label: "Transcript" },
           ]}
@@ -298,33 +333,7 @@ export default function MeetingView({ clientId, meetingId, allowedTags }: { clie
           </>
         )}
 
-        {tab === "actions" && (
-          <section className="flex flex-col">
-            {items.length === 0 && <p className="text-[15px] text-muted-foreground">No action items.</p>}
-            <ul>
-              {items.map((item) => (
-                <ItemRow
-                  key={item.id}
-                  item={{
-                    id: item.id,
-                    title: item.title,
-                    sub: [item.owner ?? "No owner", item.sourceMs !== null ? `said at ${clock(item.sourceMs / 1000)}` : null].filter(Boolean).join(" · "),
-                    dueDate: item.dueDate,
-                    done: item.status === "done",
-                  }}
-                  onToggle={() => patchItem(item, { status: item.status === "done" ? "open" : "done" })}
-                  onDue={(date) => patchItem(item, { dueDate: date })}
-                  onOpen={() => setOpenItem(item)}
-                  onDelete={() => undoDelete.remove(item)}
-                />
-              ))}
-            </ul>
-            {items.length > 0 && <p className="mt-3 text-xs text-muted-foreground">Swipe left to delete · hold to edit</p>}
-            <button type="button" onClick={addItem} className="mt-2 flex min-h-11 items-center gap-1.5 self-start text-[15px] font-semibold text-link">
-              <Plus className="size-4" aria-hidden="true" /> Add action item
-            </button>
-          </section>
-        )}
+        {tab === "actions" && !wide && actionsSection}
 
         {tab === "feedback" && s && (
           <>
@@ -386,6 +395,14 @@ export default function MeetingView({ clientId, meetingId, allowedTags }: { clie
           </>
         )}
       </main>
+      </div>
+      {wide && (
+        <aside aria-label="Action items" className="flex flex-col gap-2 px-5 pt-4 lg:sticky lg:top-6">
+          <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Action items{openCount ? ` · ${openCount} open` : ""}</h2>
+          {actionsSection}
+        </aside>
+      )}
+      </div>
 
       {undoDelete.toast}
       <ItemSheet

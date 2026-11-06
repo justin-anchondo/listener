@@ -177,7 +177,7 @@ export default function OpenItems({ ownerNames }: { ownerNames: string[] }) {
         </div>
       </div>
 
-      <main className="flex flex-col gap-6 px-5 pt-5">
+      <main className="flex flex-col gap-6 px-5 pt-5 lg:grid lg:grid-cols-2 lg:items-start lg:gap-x-10 lg:gap-y-8">
         {error && <p className="text-sm text-destructive" role="alert">{error}</p>}
         {!items && !error && <p className="text-sm text-muted-foreground">Loading…</p>}
         {items && shown.length === 0 && <p className="text-[15px] text-muted-foreground">Nothing open. Nice.</p>}
@@ -201,7 +201,7 @@ export default function OpenItems({ ownerNames }: { ownerNames: string[] }) {
             </ul>
           </section>
         ))}
-        {shown.length > 0 && <p className="text-xs text-muted-foreground">Swipe left to delete · hold to edit</p>}
+        {shown.length > 0 && <p className="text-xs text-muted-foreground [@media(pointer:fine)]:hidden">Swipe left to delete · hold to edit</p>}
       </main>
 
       {undoDelete.toast}

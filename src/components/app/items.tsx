@@ -147,8 +147,10 @@ export function ItemRow({
         <Checkbox checked={item.done} onCheckedChange={onToggle} aria-label={`Mark "${item.title}" ${item.done ? "open" : "done"}`} />
         <button
           type="button"
-          // Touch: hold to edit. Keyboard and assistive tech (no pointer detail) open on activate.
-          onClick={(e) => e.detail === 0 && onOpen()}
+          // Touch: hold to edit. Mouse, keyboard, and assistive tech open on click.
+          onClick={(e) => {
+            if (e.detail === 0 || window.matchMedia("(pointer: fine)").matches) onOpen();
+          }}
           aria-label={`Edit "${item.title}"`}
           className="flex min-h-11 min-w-0 flex-1 flex-col items-start justify-center gap-0.5 text-left"
         >

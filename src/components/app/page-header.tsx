@@ -22,7 +22,7 @@ export function PageHeader({
             <span className="truncate">{back.label}</span>
           </Link>
         ) : (
-          <span className="text-[17px] font-bold tracking-tight">Listener</span>
+          <span className="text-[17px] font-bold tracking-tight lg:invisible">Listener</span>
         )}
         {actions ? <div className="flex shrink-0 items-center gap-1">{actions}</div> : null}
       </div>

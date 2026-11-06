@@ -215,7 +215,7 @@ export default function LiveFollow({ pollSeconds, mergeGapSeconds }: { pollSecon
   if (!meeting) {
     return (
       <div className="flex min-h-dvh flex-col">
-        <header className="flex items-center justify-between px-6 py-4">
+        <header className="flex items-center justify-between px-6 py-4 lg:hidden">
           <Link href="/meetings" className="flex items-center gap-1 text-[15px] text-muted-foreground"><ChevronLeft className="size-4" aria-hidden="true" />Listener</Link>
           <ThemeToggle />
         </header>
@@ -252,7 +252,7 @@ export default function LiveFollow({ pollSeconds, mergeGapSeconds }: { pollSecon
   return (
     <div className="flex h-dvh flex-col">
       <header className="flex flex-wrap items-center gap-3 border-b px-6 py-3">
-        <Link href="/meetings" aria-label="Back to meetings" className="-ml-2 grid size-9 place-items-center rounded-full text-muted-foreground hover:bg-muted">
+        <Link href="/meetings" aria-label="Back to meetings" className="-ml-2 grid size-9 place-items-center rounded-full text-muted-foreground hover:bg-muted lg:hidden">
           <ChevronLeft className="size-5" aria-hidden="true" />
         </Link>
         <ClientAvatar client={{ id: meeting.clientId, name: meeting.clientName, logoVersion: meeting.logoVersion }} size={32} />
@@ -286,7 +286,7 @@ export default function LiveFollow({ pollSeconds, mergeGapSeconds }: { pollSecon
         <button type="button" onClick={() => setAskOpen(true)} className="flex min-h-9 items-center gap-1.5 rounded-full border px-3.5 text-[14px] text-muted-foreground hover:bg-muted">
           <MessageCircleQuestion className="size-4" aria-hidden="true" /> Ask
         </button>
-        <ThemeToggle />
+        <span className="lg:hidden"><ThemeToggle /></span>
       </header>
 
       {endedAt && (

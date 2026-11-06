@@ -80,7 +80,11 @@ export function SiriOrb({ size = "192px", className, colors, animationDuration =
             conic-gradient(from calc(var(--angle) * -2) at 85% 10%, var(--c3), transparent 20% 80%, var(--c3));
           box-shadow: inset var(--bg) 0 0 var(--shadow-spread) calc(var(--shadow-spread) * 0.2);
           filter: blur(var(--blur-amount)) contrast(var(--contrast-amount));
-          animation: siri-orb-rotate var(--animation-duration) linear infinite;
+          /* Two animations: the gradient angle (where the browser can animate it) and a
+             plain rotation, which Safari on iPhone always animates, so it never sits still. */
+          animation: siri-orb-rotate var(--animation-duration) linear infinite,
+            siri-orb-spin calc(var(--animation-duration) * 1.5) linear infinite;
+          will-change: transform;
         }
         .siri-orb::after {
           background-image: radial-gradient(circle at center, var(--bg) var(--dot-size), transparent var(--dot-size));
@@ -90,6 +94,7 @@ export function SiriOrb({ size = "192px", className, colors, animationDuration =
           mask-image: radial-gradient(black var(--mask-radius), transparent 75%);
         }
         @keyframes siri-orb-rotate { to { --angle: 360deg; } }
+        @keyframes siri-orb-spin { to { transform: rotate(360deg); } }
         @media (prefers-reduced-motion: reduce) { .siri-orb::before { animation: none; } }
       `}</style>
     </div>
