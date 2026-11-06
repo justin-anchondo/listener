@@ -13,7 +13,7 @@ export default async function LivePage() {
   return (
     <AppShell wide>
       <ComputerPasskeyOffer />
-      <LiveFollow pollSeconds={s.live.follow_poll_seconds} mergeGapSeconds={s.capture.merge_gap_seconds} />
+      <LiveFollow pollSeconds={s.live.follow_poll_seconds} mergeGapSeconds={s.capture.merge_gap_seconds} silencePromptSeconds={s.capture.silence_prompt_seconds} />
     </AppShell>
   );
 }

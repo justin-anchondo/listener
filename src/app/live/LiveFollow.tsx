@@ -46,7 +46,7 @@ async function getJson<T>(url: string): Promise<T | null> {
  * stays the microphone; this screen only reads what it saves and shares the
  * tips switch.
  */
-export default function LiveFollow({ pollSeconds, mergeGapSeconds }: { pollSeconds: number; mergeGapSeconds: number }) {
+export default function LiveFollow({ pollSeconds, mergeGapSeconds, silencePromptSeconds }: { pollSeconds: number; mergeGapSeconds: number; silencePromptSeconds: number }) {
   const [active, setActive] = useState<Active[] | null>(null);
   const [meeting, setMeeting] = useState<Active | null>(null);
   const [segments, setSegments] = useState<Segment[]>([]);
@@ -209,6 +209,10 @@ export default function LiveFollow({ pollSeconds, mergeGapSeconds }: { pollSecon
   }
 
   const entries: TranscriptEntry[] = segments.map((s) => ({ kind: "segment", id: s.seq, speaker: s.speaker, text: s.text, atSec: s.startMs / 1000, endSec: s.endMs / 1000 }));
+  // Silence, measured from the last transcript line the phone has saved.
+  const lastSpokeSec = segments.length ? segments[segments.length - 1].endMs / 1000 : 0;
+  const elapsedSec = meeting ? (Date.now() - new Date(meeting.startedAt).getTime()) / 1000 : 0;
+  const quiet = !!meeting && !endedAt && elapsedSec - lastSpokeSec >= silencePromptSeconds;
   const elapsed = meeting ? ((endedAt ? new Date(endedAt).getTime() : now) - new Date(meeting.startedAt).getTime()) / 1000 : 0;
 
   // ---------- Waiting ----------
@@ -289,6 +293,12 @@ export default function LiveFollow({ pollSeconds, mergeGapSeconds }: { pollSecon
         <span className="lg:hidden"><ThemeToggle /></span>
       </header>
 
+      {quiet && (
+        <div role="status" className="flex items-center gap-3 border-b bg-warning-soft px-6 py-2.5 text-[14px] text-warning">
+          <span className="relative flex size-2.5"><span className="absolute inline-flex size-full animate-ping rounded-full bg-warning/70" /><span className="relative inline-flex size-2.5 rounded-full bg-warning" /></span>
+          No one has spoken for {Math.floor((elapsedSec - lastSpokeSec) / 60) >= 1 ? `${Math.floor((elapsedSec - lastSpokeSec) / 60)} min` : `${Math.floor(elapsedSec - lastSpokeSec)}s`}. If the call is over, end the recording on your phone.
+        </div>
+      )}
       {endedAt && (
         <div role="status" className="flex flex-wrap items-center gap-3 border-b bg-surface px-6 py-2.5 text-[14px]">
           <span className="flex-1">The recording ended. The summary is usually ready on the meeting page within a minute.</span>

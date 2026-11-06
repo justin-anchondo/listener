@@ -43,6 +43,8 @@ capture:                            # SPEC 3
   auto_gain_control: true
   target_latency_ms: 1500
   stall_alert_seconds: 10           # no audio frames for this long -> on screen alert
+  silence_prompt_seconds: 60        # nobody has spoken for this long -> ask whether to end the recording
+  silence_snooze_seconds: 120       # after "Keep going", don't ask again for this long
   reconnect_max_attempts: 5
   reconnect_backoff_ms: [500, 1000, 2000, 4000, 8000]
 

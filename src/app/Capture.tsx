@@ -11,6 +11,7 @@ import { LiveCards, LiveToggle } from "@/components/app/live-cards";
 import { PageHeader } from "@/components/app/page-header";
 import { RecallSheet } from "@/components/app/recall-sheet";
 import { RecorderBar } from "@/components/app/recorder-bar";
+import { SilencePrompt } from "@/components/app/silence-prompt";
 import { SiriOrb } from "@/components/ui/siri-orb";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import type { CaptureSettings } from "@/lib/config";
@@ -22,6 +23,7 @@ import {
 } from "@/lib/capture/session";
 import { describeCaptureError } from "@/lib/capture/errors";
 import { mergeEntries } from "@/lib/capture/merge";
+import { shouldPromptSilence, silentSeconds } from "@/lib/capture/silence";
 import { SegmentUploader, type UploadSegment, type UploaderState } from "@/lib/capture/uploader";
 import { sendJson } from "@/lib/client/directory";
 import { type LiveCard, useLiveAssist } from "@/lib/client/live";
@@ -74,6 +76,8 @@ export default function Capture({ settings }: { settings: CaptureSettings }) {
   const [typesOpen, setTypesOpen] = useState(false);
   const [due, setDue] = useState<{ overdue: number; week: number } | null>(null);
   const [askOpen, setAskOpen] = useState(false);
+  const [lastSpeechAt, setLastSpeechAt] = useState(0); // transcript activity, for the "is the call over?" prompt
+  const [silenceSnoozedUntil, setSilenceSnoozedUntil] = useState(0);
   const [liveOn, setLiveOn] = useState(false); // live tips, per meeting, off by default
   const session = useRef<CaptureSession | null>(null);
   const uploader = useRef<SegmentUploader | null>(null);
@@ -176,6 +180,7 @@ export default function Capture({ settings }: { settings: CaptureSettings }) {
   const onEntry = useCallback((e: TranscriptEntry) => {
     setEntries((prev) => [...prev, e]);
     if (e.kind !== "segment") return;
+    setLastSpeechAt(Date.now());
     const seg = { speaker: e.speaker, startMs: Math.round(e.atSec * 1000), endMs: Math.round(e.endSec * 1000), text: e.text };
     if (uploader.current) uploader.current.add(seg);
     else early.current.push(seg);
@@ -188,6 +193,8 @@ export default function Capture({ settings }: { settings: CaptureSettings }) {
     setDetail(undefined);
     setStartedAt(Date.now());
     setNow(Date.now());
+    setLastSpeechAt(Date.now());
+    setSilenceSnoozedUntil(0);
     setUpload(null);
     setMeetingId(null);
     setSummary({ state: "idle" });
@@ -203,7 +210,10 @@ export default function Capture({ settings }: { settings: CaptureSettings }) {
         setDetail(d);
       },
       onEntry,
-      onInterim: setInterim,
+      onInterim: (t) => {
+        setInterim(t);
+        if (t) setLastSpeechAt(Date.now());
+      },
       onDiagnostics: setDiag,
       onLevel: (v) => {
         level.current = v;
@@ -283,6 +293,12 @@ export default function Capture({ settings }: { settings: CaptureSettings }) {
     : saveState === "saving" ? (upload?.failing ? `Retrying · ${upload.pending} lines waiting` : "Saving as you go · audio is never stored")
     : saveState === "finishing" ? "Saving the last lines…"
     : saveState === "failed" ? "Some lines couldn't be saved" : "";
+
+  const silenceOpen = shouldPromptSilence(
+    { live: status === "live" && !finishing, lastSpeechAt, snoozedUntil: silenceSnoozedUntil },
+    now,
+    settings.capture.silence_prompt_seconds * 1000,
+  );
 
   // ---------- Recording ----------
   const typeName = types.find((t) => t.key === selection?.template)?.name;
@@ -380,6 +396,15 @@ export default function Capture({ settings }: { settings: CaptureSettings }) {
             <p className="text-xs text-muted-foreground">{saveText}</p>
           </div>
         </div>
+        <SilencePrompt
+          open={silenceOpen}
+          seconds={silentSeconds(lastSpeechAt, now)}
+          onKeep={() => setSilenceSnoozedUntil(Date.now() + settings.capture.silence_snooze_seconds * 1000)}
+          onEnd={() => {
+            setSilenceSnoozedUntil(Number.POSITIVE_INFINITY);
+            void stop();
+          }}
+        />
         {selection && (
           <RecallSheet open={askOpen} onClose={() => setAskOpen(false)} clientId={selection.clientId} clientName={selection.clientName} linkSources={false} />
         )}

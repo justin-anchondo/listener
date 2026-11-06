@@ -44,6 +44,8 @@ const configSchema = z.object({
     auto_gain_control: z.boolean(),
     target_latency_ms: z.number().int().positive(),
     stall_alert_seconds: z.number().positive(),
+    silence_prompt_seconds: z.number().positive(),
+    silence_snooze_seconds: z.number().positive(),
     reconnect_max_attempts: z.number().int().nonnegative(),
     reconnect_backoff_ms: z.array(z.number().int().nonnegative()).min(1),
   }),
