@@ -35,7 +35,7 @@ describe.skipIf(!run)("database isolation", () => {
   });
 
   beforeEach(async () => {
-    await admin`truncate clients, projects, meetings, transcript_segments, passkeys, audit_log, summaries, action_items, brief_amendments, meeting_types, suggestions cascade`;
+    await admin`truncate clients, projects, meetings, transcript_segments, passkeys, audit_log, summaries, action_items, brief_amendments, meeting_types, suggestions, pairings cascade`;
   });
 
   it("round trips a client, project, meeting, and transcript", async () => {
@@ -252,7 +252,7 @@ describe.skipIf(!run)("summaries and action items", () => {
   });
 
   beforeEach(async () => {
-    await admin`truncate clients, projects, meetings, transcript_segments, passkeys, audit_log, summaries, action_items, brief_amendments, meeting_types, suggestions cascade`;
+    await admin`truncate clients, projects, meetings, transcript_segments, passkeys, audit_log, summaries, action_items, brief_amendments, meeting_types, suggestions, pairings cascade`;
   });
 
   async function meetingWithTranscript(name: string) {
@@ -537,7 +537,7 @@ describe.skipIf(!run)("live assistant and recall", () => {
   });
 
   beforeEach(async () => {
-    await admin`truncate clients, projects, meetings, transcript_segments, passkeys, audit_log, summaries, action_items, brief_amendments, meeting_types, suggestions cascade`;
+    await admin`truncate clients, projects, meetings, transcript_segments, passkeys, audit_log, summaries, action_items, brief_amendments, meeting_types, suggestions, pairings cascade`;
   });
 
   // Each client gets distinctive words so a leak is easy to spot.
@@ -663,7 +663,7 @@ describe.skipIf(!run)("merging meetings", () => {
   });
 
   beforeEach(async () => {
-    await admin`truncate clients, projects, meetings, transcript_segments, passkeys, audit_log, summaries, action_items, brief_amendments, meeting_types, suggestions cascade`;
+    await admin`truncate clients, projects, meetings, transcript_segments, passkeys, audit_log, summaries, action_items, brief_amendments, meeting_types, suggestions, pairings cascade`;
   });
 
   async function recording(c: string, p: string, start: string, end: string, lines: string[]) {
@@ -754,7 +754,7 @@ describe.skipIf(!run)("following a live meeting from a second screen", () => {
   });
 
   beforeEach(async () => {
-    await admin`truncate clients, projects, meetings, transcript_segments, passkeys, audit_log, summaries, action_items, brief_amendments, meeting_types, suggestions cascade`;
+    await admin`truncate clients, projects, meetings, transcript_segments, passkeys, audit_log, summaries, action_items, brief_amendments, meeting_types, suggestions, pairings cascade`;
   });
 
   it("lists only running meetings with names, and serves new lines and cards after a cursor", async () => {
@@ -795,5 +795,77 @@ describe.skipIf(!run)("following a live meeting from a second screen", () => {
     await expect(setLiveTips(b, m, true)).rejects.toThrow(/not found/);
     const [row] = await admin`select live_tips from meetings where id = ${m}`;
     expect(row.live_tips).toBe(false);
+  });
+});
+
+describe.skipIf(!run)("signing in a computer from the phone", () => {
+  let app: postgres.Sql;
+  let admin: postgres.Sql;
+
+  beforeAll(() => {
+    process.env.LISTENER_MASTER_KEY = randomBytes(32).toString("base64");
+    app = postgres(appUrl!, { prepare: false, max: 2 });
+    admin = postgres(adminUrl!, { max: 1, onnotice: () => undefined, connection: { search_path: "listener" } });
+    setDbForTests(app);
+  });
+
+  afterAll(async () => {
+    setDbForTests(undefined);
+    await app.end();
+    await admin.end();
+  });
+
+  beforeEach(async () => {
+    await admin`truncate pairings, audit_log`;
+  });
+
+  it("approves once, claims once with the computer's secret, and expires", async () => {
+    const { canClaim, newPairing } = await import("@/lib/policy/pairing");
+    const db = await import("@/lib/db/pairings");
+    const now = new Date();
+    const p = newPairing(now, 120);
+    await db.createPairing({ id: p.id, code: p.code, claimHash: p.claimHash, device: "Chrome on Windows", expiresAt: p.expiresAt });
+    expect(await db.countPendingPairings(now)).toBe(1);
+    const found = await db.findPairingByCode(p.code, now);
+    expect(found).toMatchObject({ id: p.id, device: "Chrome on Windows" });
+    expect(canClaim(found!, p.secret, now)).toBe(false); // not approved yet
+    expect(await db.markPairingClaimed(p.id, now)).toBe(false);
+
+    expect(await db.markPairingApproved(p.id, now)).toBe(true);
+    expect(await db.markPairingApproved(p.id, now)).toBe(false);
+    const approved = await db.getPairing(p.id);
+    expect(canClaim(approved!, "x".repeat(43), now)).toBe(false);
+    expect(canClaim(approved!, p.secret, now)).toBe(true);
+    expect(await db.markPairingClaimed(p.id, now)).toBe(true);
+    expect(await db.markPairingClaimed(p.id, now)).toBe(false);
+
+    const late = newPairing(now, 120);
+    await db.createPairing({ id: late.id, code: late.code, claimHash: late.claimHash, device: "Edge on Windows", expiresAt: late.expiresAt });
+    const after = new Date(now.getTime() + 121_000);
+    expect(await db.findPairingByCode(late.code, after)).toBeNull();
+    expect(await db.markPairingApproved(late.id, after)).toBe(false);
+
+    const events = await admin`select event from audit_log order by id`;
+    expect(events.map((e) => e.event)).toEqual(["pairing.created", "pairing.approved", "pairing.claimed", "pairing.created"]);
+    const stored = JSON.stringify(await admin`select * from pairings`);
+    expect(stored).not.toContain(p.secret);
+  });
+
+  it("keeps requests out of every scope but auth, and lets the app change only approval and claim times", async () => {
+    const { newPairing } = await import("@/lib/policy/pairing");
+    const db = await import("@/lib/db/pairings");
+    const p = newPairing(new Date(), 120);
+    await db.createPairing({ id: p.id, code: p.code, claimHash: p.claimHash, device: "Safari on Mac", expiresAt: p.expiresAt });
+    for (const scope of ["client", "directory", "open_items", "recent", "settings"]) {
+      const rows = await app.begin(async (tx) => {
+        await tx`select set_config('search_path', 'listener', true), set_config('app.scope', ${scope}, true)`;
+        return tx`select * from pairings`;
+      });
+      expect([scope, rows.length]).toEqual([scope, 0]);
+    }
+    await expect(app.begin(async (tx) => {
+      await tx`select set_config('search_path', 'listener', true), set_config('app.scope', 'auth', true)`;
+      return tx`update pairings set claim_hash = 'x'`;
+    })).rejects.toThrow(/permission denied/);
   });
 });

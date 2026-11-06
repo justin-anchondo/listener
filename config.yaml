@@ -17,6 +17,8 @@ security:                           # SPEC 6
   session_max_hours: 12             # absolute session lifetime, even with activity
   session_refresh_seconds: 60       # how often activity extends the idle window
   passkey_challenge_seconds: 300    # time allowed to finish a Face ID prompt
+  pairing_ttl_seconds: 120          # a computer's sign in code, approved from the phone, lasts this long
+  pairing_max_pending: 5            # sign in codes waiting at once; more are refused
 
 access_gate:                        # SPEC 6.1: the access code only enrolls the first passkey
   min_code_length: 12               # LISTENER_ACCESS_CODE shorter than this -> enrollment refused

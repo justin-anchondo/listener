@@ -3,8 +3,9 @@
 import { startAuthentication, startRegistration } from "@simplewebauthn/browser";
 import { Mic } from "lucide-react";
 import { useEffect, useState } from "react";
+import { PairPanel } from "./PairPanel";
 
-type Mode = "loading" | "signin" | "setup" | "error";
+type Mode = "loading" | "signin" | "pair" | "setup" | "error";
 
 async function post(url: string, body?: unknown): Promise<Response> {
   return fetch(url, {
@@ -75,10 +76,16 @@ export default function SignIn() {
       {mode === "loading" && <p className="text-center text-muted-foreground">Loading…</p>}
       {mode === "error" && <p className="text-center text-destructive">Can&apos;t reach the server. Check the connection and reload.</p>}
       {mode === "signin" && (
-        <button type="button" onClick={signIn} disabled={busy} className="min-h-12 rounded-xl bg-primary text-[15px] font-semibold text-primary-foreground disabled:opacity-50">
-          {busy ? "Waiting for Face ID…" : "Sign in with Face ID"}
-        </button>
+        <div className="flex flex-col gap-3">
+          <button type="button" onClick={signIn} disabled={busy} className="min-h-12 rounded-xl bg-primary text-[15px] font-semibold text-primary-foreground disabled:opacity-50">
+            {busy ? "Waiting for Face ID…" : "Sign in with Face ID"}
+          </button>
+          <button type="button" onClick={() => { setMessage(null); setMode("pair"); }} className="min-h-12 rounded-xl border text-[15px] font-medium">
+            On a computer? Sign in with your phone
+          </button>
+        </div>
       )}
+      {mode === "pair" && <PairPanel onCancel={() => setMode("signin")} />}
       {mode === "setup" && (
         <form onSubmit={setUp} className="flex flex-col gap-3">
           <p className="text-[15px] text-muted-foreground">First time here. Enter your access code to set up Face ID sign in on this device.</p>

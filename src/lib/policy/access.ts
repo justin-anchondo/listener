@@ -57,7 +57,7 @@ export function shouldRefresh(s: Session, nowMs: number, refreshMs: number): boo
   return nowMs - s.seenAtMs >= refreshMs;
 }
 
-export type ChallengePurpose = "enroll" | "login";
+export type ChallengePurpose = "enroll" | "login" | "pair";
 
 export function newChallenge(): string {
   return randomBytes(32).toString("base64url");

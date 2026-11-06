@@ -1,4 +1,5 @@
 import { cookies, headers } from "next/headers";
+import { PAIR_COOKIE } from "@/lib/policy/pairing";
 import { loadConfig } from "@/lib/config";
 import { deriveKey } from "@/lib/crypto/keys";
 import { masterKey } from "@/lib/db/keyring";
@@ -102,4 +103,19 @@ export async function relyingParty(): Promise<{ rpID: string; origin: string }> 
   const proto = h.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https");
   const origin = `${proto}://${host}`;
   return { rpID: new URL(origin).hostname, origin };
+}
+
+// The computer's half of a phone approved sign in (SPEC 6.1): sent only to the pairing routes.
+const PAIR_PATH = "/api/auth/pair";
+
+export async function setPairCookie(value: string, ttlSeconds: number): Promise<void> {
+  (await cookies()).set(PAIR_COOKIE, value, { ...cookieOptions(ttlSeconds), path: PAIR_PATH });
+}
+
+export async function readPairCookie(): Promise<string | undefined> {
+  return (await cookies()).get(PAIR_COOKIE)?.value;
+}
+
+export async function clearPairCookie(): Promise<void> {
+  (await cookies()).set(PAIR_COOKIE, "", { ...cookieOptions(0), path: PAIR_PATH });
 }

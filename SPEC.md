@@ -93,7 +93,7 @@ Confidentiality outranks convenience. When a feature and the security rules in s
 - The desktop reads only what the phone already saves (transcript segments and live cards) through the same client scoped routes, polling on `assist.follow_poll_seconds`. Live tips on or off is stored on the meeting, so either screen can switch it; the phone runs the checks.
 - Finding the running meeting uses the recent meetings view (client and project names and times only).
 - Desktop alerts for new tips are off by default and opt in per browser; the owner is told they can appear on a shared screen.
-- Desktop sign in uses the owner's existing passkey through the browser's "use a phone" option. No new sign in method is added.
+- Desktop sign in uses the owner's existing passkey through the browser's "use a phone" option, or, where Bluetooth is blocked, approval from the signed in phone (6.1).
 
 ### 4.3 Post meeting outputs
 
@@ -141,6 +141,7 @@ Rules:
 - Single owner account. Public sign up is disabled.
 - Sign in with a passkey (Face ID or Touch ID). Sessions expire after the configured idle time and after an absolute maximum.
 - The access code is only used to enroll the first passkey. Once a passkey exists, more can be added only from a signed in session.
+- A computer can also sign in by approval from the signed in phone: the computer shows a short code (and QR) and holds a random secret in an httpOnly cookie scoped to the pairing routes; the phone looks up the code and approves it only after a fresh passkey check; the computer then claims a normal session with its secret. Requests expire after `security.pairing_ttl_seconds`, can be approved once and claimed once, at most `security.pairing_max_pending` can wait at a time, only the secret's hash is stored, and they are readable only in the auth scope and purged daily. The approval screen shows the code and a coarse browser description so the owner can check it is their own computer.
 - The database enforces row level security. Server routes connect as a restricted role that cannot bypass it, and no service key is used, including by the purge job.
 
 ### 6.2 Encryption

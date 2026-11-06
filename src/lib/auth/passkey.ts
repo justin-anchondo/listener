@@ -51,9 +51,10 @@ export async function finishEnrollment(response: RegistrationResponseJSON): Prom
   return true;
 }
 
-export async function loginOptions() {
+/** Face ID prompt for signing in, or ("pair") for approving a computer from a signed in phone. */
+export async function loginOptions(purpose: "login" | "pair" = "login") {
   const { rpID } = await relyingParty();
-  const challenge = await issueChallenge("login");
+  const challenge = await issueChallenge(purpose);
   return generateAuthenticationOptions({
     rpID,
     challenge: new TextEncoder().encode(challenge),
@@ -62,8 +63,8 @@ export async function loginOptions() {
   });
 }
 
-export async function finishLogin(response: AuthenticationResponseJSON): Promise<boolean> {
-  const challenge = await takeChallenge("login");
+export async function finishLogin(response: AuthenticationResponseJSON, purpose: "login" | "pair" = "login"): Promise<boolean> {
+  const challenge = await takeChallenge(purpose);
   if (!challenge || typeof response?.id !== "string") return false;
   const stored = await getPasskey(response.id);
   if (!stored) return false;

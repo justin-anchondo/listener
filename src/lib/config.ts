@@ -18,6 +18,8 @@ const configSchema = z.object({
     session_max_hours: z.number().positive(),
     session_refresh_seconds: z.number().int().positive(),
     passkey_challenge_seconds: z.number().int().positive(),
+    pairing_ttl_seconds: z.number().int().min(30).max(600),
+    pairing_max_pending: z.number().int().positive(),
   }),
   access_gate: z.object({
     min_code_length: z.number().int().min(8),
