@@ -1,11 +1,13 @@
 "use client";
 
 import { startAuthentication } from "@simplewebauthn/browser";
-import { CheckCircle2, Laptop } from "lucide-react";
+import { CheckCircle2, Laptop, ScanLine } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { PageHeader } from "@/components/app/page-header";
+import { QrScanner } from "@/components/app/qr-scanner";
 import { sendJson } from "@/lib/client/directory";
+import { codeFromQr } from "@/lib/policy/pairing";
 
 type Found = { id: string; code: string; device: string; expiresAt: string };
 
@@ -14,6 +16,7 @@ export default function PairApprove({ initialCode }: { initialCode: string }) {
   const [found, setFound] = useState<Found | null>(null);
   const [state, setState] = useState<"idle" | "looking" | "approving" | "done">("idle");
   const [error, setError] = useState<string | null>(null);
+  const [scanning, setScanning] = useState(!initialCode);
 
   async function lookup(c = code) {
     setError(null);
@@ -23,6 +26,15 @@ export default function PairApprove({ initialCode }: { initialCode: string }) {
     if (!res?.ok) return setError(res?.status === 400 ? "That doesn't look like a sign in code (8 letters and numbers)." : "No computer is waiting with that code. Codes expire after 2 minutes.");
     setFound((await res.json()) as Found);
   }
+
+  const onScan = useCallback((text: string) => {
+    setScanning(false);
+    const scanned = codeFromQr(text, window.location.host);
+    if (!scanned) return setError("That QR code isn't a Listener sign in code.");
+    setCode(scanned);
+    void lookup(scanned);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (initialCode) void lookup(initialCode);
@@ -69,9 +81,14 @@ export default function PairApprove({ initialCode }: { initialCode: string }) {
             </button>
             <button type="button" onClick={() => { setFound(null); setCode(""); }} className="min-h-10 text-[14px] text-muted-foreground">Not me, cancel</button>
           </>
+        ) : scanning ? (
+          <QrScanner onResult={onScan} onClose={() => setScanning(false)} />
         ) : (
           <form className="flex flex-col gap-3" onSubmit={(e) => { e.preventDefault(); void lookup(); }}>
-            <p className="text-[15px] text-muted-foreground">On the computer, choose <b className="text-foreground">Sign in with your phone</b>, then enter the code it shows.</p>
+            <button type="button" onClick={() => { setError(null); setScanning(true); }} className="flex min-h-12 items-center justify-center gap-2 rounded-xl border text-[15px] font-medium">
+              <ScanLine className="size-5" aria-hidden="true" /> Scan the QR code
+            </button>
+            <p className="text-center text-[13px] text-muted-foreground">or type the code the computer shows</p>
             <input
               autoFocus
               value={code}

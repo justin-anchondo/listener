@@ -88,3 +88,19 @@ export function describeDevice(userAgent: string | null): string {
   const os = /Windows/.test(ua) ? "Windows" : /Mac OS X|Macintosh/.test(ua) ? "Mac" : /CrOS/.test(ua) ? "ChromeOS" : /Linux/.test(ua) ? "Linux" : /iPhone|iPad/.test(ua) ? "iOS" : null;
   return os ? `${browser} on ${os}` : browser;
 }
+
+/**
+ * Reads a sign in code from a scanned QR: only this site's /pair link
+ * ("https://host/pair?code=K7QM-4F2X") or a bare code. Anything else is ignored.
+ */
+export function codeFromQr(text: string, expectedHost: string): string | null {
+  const t = text.trim();
+  if (!/^https?:\/\//i.test(t)) return normalizeCode(t);
+  try {
+    const url = new URL(t);
+    if (url.host !== expectedHost || url.pathname !== "/pair") return null;
+    return normalizeCode(url.searchParams.get("code"));
+  } catch {
+    return null;
+  }
+}

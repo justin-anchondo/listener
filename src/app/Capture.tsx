@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, ChevronDown, MessageCircleQuestion, Mic, MonitorPlay, Sparkles } from "lucide-react";
+import { AlertTriangle, ChevronDown, MessageCircleQuestion, Mic, MonitorPlay, MonitorSmartphone, Sparkles } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -395,6 +395,9 @@ export default function Capture({ settings }: { settings: CaptureSettings }) {
           <>
             <Link href="/live" className="hidden min-h-9 items-center gap-1.5 rounded-full border px-3 text-[13px] text-muted-foreground hover:bg-muted lg:flex">
               <MonitorPlay className="size-4" aria-hidden="true" /> Live view
+            </Link>
+            <Link href="/pair" aria-label="Sign in a computer" className="grid size-10 place-items-center rounded-full text-muted-foreground hover:bg-muted lg:hidden">
+              <MonitorSmartphone className="size-5" aria-hidden="true" />
             </Link>
             <ThemeToggle />
           </>

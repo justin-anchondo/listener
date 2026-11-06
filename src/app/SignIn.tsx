@@ -3,10 +3,10 @@
 import { startAuthentication, startRegistration } from "@simplewebauthn/browser";
 import { Mic } from "lucide-react";
 import { useEffect, useState } from "react";
-import { isDesktopBrowser } from "@/lib/device";
+import { computerSignInName, hasComputerPasskey, isDesktopBrowser } from "@/lib/device";
 import { PairPanel } from "./PairPanel";
 
-type Mode = "loading" | "signin" | "pair" | "setup" | "error";
+type Mode = "loading" | "signin" | "computer" | "pair" | "setup" | "error";
 
 async function post(url: string, body?: unknown): Promise<Response> {
   return fetch(url, {
@@ -33,7 +33,8 @@ export default function SignIn() {
           maxTouchPoints: navigator.maxTouchPoints ?? 0,
           finePointer: window.matchMedia("(pointer: fine)").matches,
         });
-        setMode(desktop ? "pair" : "signin");
+        // A computer that has its own passkey (Windows Hello, Touch ID) uses it; otherwise the phone approves it.
+        setMode(desktop ? (hasComputerPasskey() ? "computer" : "pair") : "signin");
       })
       .catch(() => setMode("error"));
   }, []);
@@ -89,6 +90,16 @@ export default function SignIn() {
         <div className="flex flex-col gap-3">
           <button type="button" onClick={signIn} disabled={busy} className="min-h-12 rounded-xl bg-primary text-[15px] font-semibold text-primary-foreground disabled:opacity-50">
             {busy ? "Waiting for Face ID…" : "Sign in with Face ID"}
+          </button>
+        </div>
+      )}
+      {mode === "computer" && (
+        <div className="flex flex-col gap-3">
+          <button type="button" onClick={signIn} disabled={busy} className="min-h-12 rounded-xl bg-primary text-[15px] font-semibold text-primary-foreground disabled:opacity-50">
+            {busy ? "Waiting…" : `Sign in with ${computerSignInName(navigator.userAgent)}`}
+          </button>
+          <button type="button" onClick={() => { setMessage(null); setMode("pair"); }} className="min-h-10 text-[14px] text-muted-foreground">
+            Use my phone instead
           </button>
         </div>
       )}

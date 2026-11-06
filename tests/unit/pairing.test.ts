@@ -77,3 +77,14 @@ describe("cookie and device", () => {
     expect(describeDevice(null)).toBe("A browser");
   });
 });
+
+describe("codeFromQr", () => {
+  it("reads codes from this site's pair links or bare codes only", async () => {
+    const { codeFromQr } = await import("@/lib/policy/pairing");
+    expect(codeFromQr("https://listener-two.vercel.app/pair?code=K7QM-4F2X", "listener-two.vercel.app")).toBe("K7QM4F2X");
+    expect(codeFromQr(" k7qm4f2x ", "listener-two.vercel.app")).toBe("K7QM4F2X");
+    expect(codeFromQr("https://evil.example/pair?code=K7QM-4F2X", "listener-two.vercel.app")).toBeNull();
+    expect(codeFromQr("https://listener-two.vercel.app/other?code=K7QM-4F2X", "listener-two.vercel.app")).toBeNull();
+    expect(codeFromQr("hello world", "listener-two.vercel.app")).toBeNull();
+  });
+});

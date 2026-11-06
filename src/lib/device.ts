@@ -10,3 +10,36 @@ export function isDesktopBrowser(t: BrowserTraits): boolean {
   if (/Macintosh/.test(ua) && t.maxTouchPoints > 1) return false;
   return t.finePointer;
 }
+
+/** What the computer's own sign in is called, for buttons ("Sign in with Windows Hello"). */
+export function computerSignInName(userAgent: string): string {
+  if (/Windows/.test(userAgent)) return "Windows Hello";
+  if (/Macintosh|Mac OS X/.test(userAgent)) return "Touch ID";
+  return "this computer's passkey";
+}
+
+const COMPUTER_PASSKEY_KEY = "listener.computerPasskey"; // per browser hint: this computer has its own passkey
+
+export function hasComputerPasskey(): boolean {
+  try {
+    return localStorage.getItem(COMPUTER_PASSKEY_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+export function rememberComputerPasskey(state: "1" | "dismissed"): void {
+  try {
+    localStorage.setItem(COMPUTER_PASSKEY_KEY, state);
+  } catch {
+    // storage unavailable; the offer just shows again next time
+  }
+}
+
+export function computerPasskeyOfferDismissed(): boolean {
+  try {
+    return localStorage.getItem(COMPUTER_PASSKEY_KEY) !== null;
+  } catch {
+    return true;
+  }
+}

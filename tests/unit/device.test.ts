@@ -20,3 +20,12 @@ describe("isDesktopBrowser", () => {
     expect(isDesktopBrowser({ userAgent: chromeWin, maxTouchPoints: 10, finePointer: false })).toBe(false);
   });
 });
+
+describe("computerSignInName", () => {
+  it("names the computer's own sign in", async () => {
+    const { computerSignInName } = await import("@/lib/device");
+    expect(computerSignInName(chromeWin)).toBe("Windows Hello");
+    expect(computerSignInName(safariMac)).toBe("Touch ID");
+    expect(computerSignInName("Mozilla/5.0 (X11; Linux x86_64)")).toBe("this computer's passkey");
+  });
+});

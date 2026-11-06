@@ -1,4 +1,5 @@
 import { AppShell } from "@/components/app/app-shell";
+import { ComputerPasskeyOffer } from "@/components/app/computer-passkey-offer";
 import { requirePageSession } from "@/lib/auth/guard";
 import { captureSettings, loadConfig } from "@/lib/config";
 import LiveFollow from "./LiveFollow";
@@ -11,6 +12,7 @@ export default async function LivePage() {
   const s = captureSettings(loadConfig());
   return (
     <AppShell wide>
+      <ComputerPasskeyOffer />
       <LiveFollow pollSeconds={s.live.follow_poll_seconds} mergeGapSeconds={s.capture.merge_gap_seconds} />
     </AppShell>
   );

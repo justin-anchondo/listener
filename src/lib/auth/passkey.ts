@@ -12,7 +12,8 @@ import { getPasskey, listPasskeyIds, markPasskeyUsed, savePasskey } from "@/lib/
 // Single owner, so the user handle is fixed. Face ID or Touch ID is required.
 const OWNER_ID = new TextEncoder().encode("listener-owner");
 
-export async function enrollmentOptions() {
+/** "computer" asks the browser for the computer's own authenticator (Windows Hello, Touch ID), not a phone. */
+export async function enrollmentOptions(device: "any" | "computer" = "any") {
   const { rpID } = await relyingParty();
   const existing = await listPasskeyIds();
   const challenge = await issueChallenge("enroll");
@@ -25,7 +26,11 @@ export async function enrollmentOptions() {
     challenge: new TextEncoder().encode(challenge),
     attestationType: "none",
     excludeCredentials: existing.map((p) => ({ id: p.id, transports: p.transports as never })),
-    authenticatorSelection: { residentKey: "required", userVerification: "required" },
+    authenticatorSelection: {
+      residentKey: "required",
+      userVerification: "required",
+      ...(device === "computer" ? { authenticatorAttachment: "platform" as const } : {}),
+    },
   });
 }
 

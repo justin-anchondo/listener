@@ -11,9 +11,10 @@ export const dynamic = "force-dynamic";
 // the access code only while no passkey exists yet (first setup).
 export async function POST(request: Request) {
   return handle("auth.enroll.options", async () => {
-    if (!(await hasSession())) {
+    const body = await readJson(request).catch(() => ({}) as Record<string, unknown>);
+    const signedIn = await hasSession();
+    if (!signedIn) {
       const expected = process.env.LISTENER_ACCESS_CODE;
-      const body = await readJson(request).catch(() => ({}) as Record<string, unknown>);
       const code = typeof body.code === "string" ? body.code : "";
       if (!isGateConfigured(expected, loadConfig().access_gate.min_code_length)) {
         return json({ error: "not_configured" }, 503);
@@ -21,6 +22,7 @@ export async function POST(request: Request) {
       if ((await countPasskeys()) > 0) return json({ error: "already_set_up" }, 403);
       if (!checkAccessCode(code, expected)) throw new UnauthorizedError();
     }
-    return json(await enrollmentOptions());
+    // A signed in computer can add its own Windows Hello or Touch ID passkey.
+    return json(await enrollmentOptions(signedIn && body.device === "computer" ? "computer" : "any"));
   });
 }
