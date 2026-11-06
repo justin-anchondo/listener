@@ -1,6 +1,6 @@
 "use client";
 
-import { isMine } from "@/lib/owner";
+import { isMine, isMyTask } from "@/lib/owner";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { type ItemPatch, ItemRow, ItemSheet, type SheetItem, useUndoDelete } from "@/components/app/items";
 import { PageHeader } from "@/components/app/page-header";
@@ -35,7 +35,7 @@ const DATE_GROUPS: { key: DueGroup; label: string; urgent?: boolean }[] = [
 
 const VIEW_KEY = "listener.itemsView"; // per device convenience
 
-export default function OpenItems({ ownerNames }: { ownerNames: string[] }) {
+export default function OpenItems({ ownerNames, onlyMine }: { ownerNames: string[]; onlyMine: boolean }) {
   const [items, setItems] = useState<OpenItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<Set<string>>(new Set()); // ticked this visit, kept visible so it can be undone
@@ -100,7 +100,7 @@ export default function OpenItems({ ownerNames }: { ownerNames: string[] }) {
   }
 
   const today = localIsoDate();
-  const shown = useMemo(() => (items ?? []).filter((i) => i.id !== undoDelete.hiddenId && (!mineOnly || isMine(i.owner, ownerNames))), [items, mineOnly, ownerNames, undoDelete.hiddenId]);
+  const shown = useMemo(() => (items ?? []).filter((i) => i.id !== undoDelete.hiddenId && (onlyMine ? isMyTask(i.owner, ownerNames) : !mineOnly || isMine(i.owner, ownerNames))), [items, mineOnly, onlyMine, ownerNames, undoDelete.hiddenId]);
   const openOnes = shown.filter((i) => !done.has(i.id));
   const counts = dueSummary(openOnes, today);
 
@@ -162,7 +162,7 @@ export default function OpenItems({ ownerNames }: { ownerNames: string[] }) {
           fullWidth
           aria-label="Group open items"
         />
-        <div>
+        <div className={onlyMine ? "hidden" : undefined}>
           <button
             type="button"
             aria-pressed={mineOnly}

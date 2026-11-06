@@ -267,8 +267,21 @@ describe.skipIf(!run)("summaries and action items", () => {
   async function summarize(c: string, m: string, gen = fakeGenerate) {
     const { loadConfig } = await import("@/lib/config");
     const { summarizeMeeting } = await import("@/lib/assist/post");
-    return summarizeMeeting(loadConfig(), c, m, "America/Los_Angeles", gen);
+    // These tests cover storing tasks for several owners, so they keep everyone's.
+    const cfg = loadConfig();
+    return summarizeMeeting({ ...cfg, assist: { ...cfg.assist, only_my_action_items: false } }, c, m, "America/Los_Angeles", gen);
   }
+
+  it("stores only the owner's tasks when configured, and lists the rest on the summary", async () => {
+    const { loadConfig } = await import("@/lib/config");
+    const { summarizeMeeting } = await import("@/lib/assist/post");
+    const { latestSummary, listMeetingItems } = await import("@/lib/db/summaries");
+    const { c, m } = await meetingWithTranscript("Acme");
+    const cfg = loadConfig();
+    await summarizeMeeting({ ...cfg, assist: { ...cfg.assist, only_my_action_items: true } }, c, m, "America/Los_Angeles", fakeGenerate);
+    expect((await listMeetingItems(c, m)).map((i) => [i.title, i.owner])).toEqual([["Send proposal", "Me"]]);
+    expect((await latestSummary(c, m))?.content.others_commitments).toEqual(["Dana: Share brand assets"]);
+  });
 
   const prompts: string[] = [];
   const fakeGenerate = async (prompt: { user: string }) => {
@@ -553,7 +566,7 @@ describe.skipIf(!run)("live assistant and recall", () => {
     await endMeeting(c, old, 30);
     await saveGeneratedSummary(c, old, "fake", {
       title: `${secret} pricing call`, purpose: "p", summary: `${secret} summary text.`, main_points: [], decisions: [`${secret} decision`],
-      key_quotes: [], feedback: { went_well: [], suggestions: [], not_covered: [], commitments_by_me: [], open_questions: [] }, free_tags: [], participants: [],
+      key_quotes: [], feedback: { went_well: [], suggestions: [], not_covered: [], commitments_by_me: [], open_questions: [] }, free_tags: [], participants: [], others_commitments: [],
     }, [], [{ title: `${secret} follow up`, owner: "Me", dueDate: null, sourceQuote: null, sourceMs: null }]);
     const now = await startMeeting(c, p, "general");
     return { c, p, old, now };
@@ -688,7 +701,7 @@ describe.skipIf(!run)("merging meetings", () => {
     await addActionItem(c, b, { title: "Send deck", owner: "Me", dueDate: null, sourceQuote: null, sourceMs: 5000 });
     await saveGeneratedSummary(c, b, "fake", {
       title: "Second half", purpose: "", summary: "", main_points: [], decisions: [], key_quotes: [],
-      feedback: { went_well: [], suggestions: [], not_covered: [], commitments_by_me: [], open_questions: [] }, free_tags: [], participants: [],
+      feedback: { went_well: [], suggestions: [], not_covered: [], commitments_by_me: [], open_questions: [] }, free_tags: [], participants: [], others_commitments: [],
     }, [], [], ["Budget moved to Q1."]);
     const [card] = await saveSuggestions(c, b, [{ kind: "reminder", text: "Mention the Q1 move.", sourceMs: 0 }], 30);
     await updateSuggestion(c, card.id, { pinned: true }, 30);

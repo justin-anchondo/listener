@@ -26,6 +26,7 @@ import { SegmentUploader, type UploadSegment, type UploaderState } from "@/lib/c
 import { sendJson } from "@/lib/client/directory";
 import { type LiveCard, useLiveAssist } from "@/lib/client/live";
 import { isDesktopBrowser } from "@/lib/device";
+import { isMyTask } from "@/lib/owner";
 import { useRouter } from "next/navigation";
 import { clock, dueSummary, localIsoDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -160,9 +161,9 @@ export default function Capture({ settings }: { settings: CaptureSettings }) {
     let cancelled = false;
     void fetch("/api/open-items", { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : { items: [] }))
-      .then(({ items }: { items: { clientId: string; dueDate: string | null; snoozedUntil: string | null }[] }) => {
+      .then(({ items }: { items: { clientId: string; owner: string | null; dueDate: string | null; snoozedUntil: string | null }[] }) => {
         if (cancelled) return;
-        const mine = items.filter((i) => i.clientId === selection.clientId);
+        const mine = items.filter((i) => i.clientId === selection.clientId && (!settings.onlyMyTasks || isMyTask(i.owner, settings.ownerNames)));
         const s = dueSummary(mine, localIsoDate());
         setDue({ overdue: s.overdue, week: s.week });
       })

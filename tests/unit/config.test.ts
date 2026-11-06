@@ -38,7 +38,7 @@ describe("config", () => {
   it("exposes only capture, stt, and live timing settings to the browser", () => {
     const config = parseConfig(raw);
     const s = captureSettings(config);
-    expect(Object.keys(s).sort()).toEqual(["capture", "live", "ownerNames", "storage", "stt", "templates"]);
+    expect(Object.keys(s).sort()).toEqual(["capture", "live", "onlyMyTasks", "ownerNames", "storage", "stt", "templates"]);
     expect(Object.keys(s.live).sort()).toEqual(["follow_poll_seconds", "interval_seconds", "max_suggestions", "min_gap_seconds", "window_minutes"]);
     const sent = JSON.stringify(s);
     expect(sent).not.toContain(config.models.live);

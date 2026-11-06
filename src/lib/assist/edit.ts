@@ -39,6 +39,7 @@ export function cleanEditedSummary(body: Record<string, unknown>, l: EditLimits)
       },
       free_tags: cleanList(c.free_tags ?? [], l.maxFreeTags, 40, "free_tags"),
       participants: cleanList(c.participants ?? [], l.maxListItems, 60, "participants"),
+      others_commitments: cleanList(c.others_commitments ?? [], l.maxListItems, l.maxItemChars, "others_commitments"),
     },
   };
 }

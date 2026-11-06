@@ -13,3 +13,8 @@ export function isMine(owner: string | null | undefined, names: string[]): boole
     return !!name && (o === name || first === name || first === name.split(/\s+/)[0]);
   });
 }
+
+/** A task on the owner's list: assigned to them, or to no one (as when they add one themselves). */
+export function isMyTask(owner: string | null | undefined, names: string[]): boolean {
+  return !owner?.trim() || isMine(owner, names);
+}

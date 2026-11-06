@@ -9,7 +9,7 @@ export default async function ItemsPage() {
   await requirePageSession();
   return (
     <AppShell>
-      <OpenItems ownerNames={loadConfig().owner.names} />
+      <OpenItems ownerNames={loadConfig().owner.names} onlyMine={loadConfig().assist.only_my_action_items} />
     </AppShell>
   );
 }

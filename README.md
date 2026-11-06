@@ -64,6 +64,7 @@ Three tabs at the bottom: **Record**, **Meetings**, **Open items**. The small su
 
 After **Stop**, the summary and action items are generated automatically (usually under a minute). Tap **View** to open the meeting:
 
+- Only your own commitments become action items. What other people committed to is listed on the summary under **Others committed to** (set `assist.only_my_action_items` to false in `config.yaml` to track everyone's).
 - Tick action items done, edit their text, owner, or due date, or add your own.
 - Under **Speakers**, name the people on the call and pick which one is **Me**, then **Regenerate** for feedback on your own talk time.
 - **Edit summary** saves a new version. Earlier versions are kept.

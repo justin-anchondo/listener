@@ -97,3 +97,49 @@ describe("sameTask", () => {
     expect(sameTask({ title: "Call Dana", owner: "Me" }, { title: "Email Dana", owner: "Me" })).toBe(false);
   });
 });
+
+describe("only my action items", () => {
+  const out = (items: { title: string; owner: string; owner_name: string | null; due_date: string | null }[]) => ({
+    title: "t", participants: [], purpose: "p", summary: "s", main_points: [], decisions: [], key_quotes: [], tags: [], free_tags: [], brief_updates: [],
+    feedback: { went_well: [], suggestions: [], not_covered: [], commitments_by_me: [], open_questions: [] },
+    action_items: items.map((i) => ({ ...i, source_quote: "", source_line: 0 })),
+  }) as unknown as MeetingOutputT;
+  const limits = { maxListItems: 30, maxItemChars: 2000, maxFreeTags: 3, allowedTags: [], ownerNames: ["Justin"], onlyMine: true };
+
+  it("keeps the owner's tasks and moves everyone else's to the summary", () => {
+    const r = cleanOutput(out([
+      { title: "Send the proposal", owner: "me", owner_name: null, due_date: "2026-11-06" },
+      { title: "Start the search for Jordan's replacement", owner: "them", owner_name: "Ali Engel", due_date: "2026-11-09" },
+      { title: "Share the deck", owner: "them", owner_name: "Justin", due_date: null },
+      { title: "Book the venue", owner: "unknown", owner_name: null, due_date: null },
+    ]), [0], limits);
+    expect(r.actionItems.map((a) => [a.title, a.owner])).toEqual([["Send the proposal", "Me"], ["Share the deck", "Me"]]);
+    expect(r.content.others_commitments).toEqual([
+      "Ali Engel: Start the search for Jordan's replacement (due 2026-11-09)",
+      "Someone: Book the venue",
+    ]);
+  });
+
+  it("keeps everyone's tasks when the setting is off", () => {
+    const r = cleanOutput(out([
+      { title: "Send the proposal", owner: "me", owner_name: null, due_date: null },
+      { title: "Start the search", owner: "them", owner_name: "Ali Engel", due_date: null },
+    ]), [0], { ...limits, onlyMine: false });
+    expect(r.actionItems).toHaveLength(2);
+    expect(r.content.others_commitments).toEqual([]);
+  });
+
+  it("treats unassigned tasks as the owner's own, and reads older summaries without the new list", async () => {
+    const { isMyTask } = await import("@/lib/owner");
+    expect(isMyTask(null, ["Justin"])).toBe(true);
+    expect(isMyTask("Me", ["Justin"])).toBe(true);
+    expect(isMyTask("Justin", ["Justin"])).toBe(true);
+    expect(isMyTask("Ali Engel", ["Justin"])).toBe(false);
+    const { SummaryContent } = await import("@/lib/assist/schema");
+    const old = SummaryContent.parse({
+      title: "t", purpose: "", summary: "", main_points: [], decisions: [], key_quotes: [],
+      feedback: { went_well: [], suggestions: [], not_covered: [], commitments_by_me: [], open_questions: [] }, free_tags: [],
+    });
+    expect(old.others_commitments).toEqual([]);
+  });
+});

@@ -69,6 +69,7 @@ const configSchema = z.object({
     post_max_tokens: z.number().int().positive(),
     max_list_items: z.number().int().positive(),
     max_action_items: z.number().int().positive(),
+    only_my_action_items: z.boolean(),
     max_item_chars: z.number().int().positive(),
     transcript_merge_gap_seconds: z.number().nonnegative(),
     max_brief_updates: z.number().int().nonnegative(),
@@ -108,6 +109,7 @@ export type CaptureSettings = Pick<Config, "capture" | "stt"> & {
   templates: { key: string; name: string }[];
   live: { interval_seconds: number; min_gap_seconds: number; window_minutes: number; max_suggestions: number; follow_poll_seconds: number };
   ownerNames: string[];
+  onlyMyTasks: boolean;
 };
 
 export function parseConfig(text: string): Config {
@@ -140,5 +142,6 @@ export function captureSettings(config: Config): CaptureSettings {
       follow_poll_seconds: config.assist.follow_poll_seconds,
     },
     ownerNames: config.owner.names,
+    onlyMyTasks: config.assist.only_my_action_items,
   };
 }

@@ -10,7 +10,13 @@ export default async function MeetingPage({ params }: { params: Promise<{ client
   const { clientId, meetingId } = await params;
   return (
     <AppShell>
-      <MeetingView clientId={clientId} meetingId={meetingId} allowedTags={loadConfig().tags} />
+      <MeetingView
+        clientId={clientId}
+        meetingId={meetingId}
+        allowedTags={loadConfig().tags}
+        ownerNames={loadConfig().owner.names}
+        onlyMine={loadConfig().assist.only_my_action_items}
+      />
     </AppShell>
   );
 }

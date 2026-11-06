@@ -7,6 +7,7 @@ import { type ItemPatch, ItemRow, ItemSheet, type SheetItem, useUndoDelete } fro
 import { MergeSheet } from "@/components/app/merge-sheet";
 import { PageHeader } from "@/components/app/page-header";
 import { useWideScreen } from "@/lib/client/media";
+import { isMyTask } from "@/lib/owner";
 import { Drawer, DrawerContent } from "@/components/ui/drawer";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import type { SummaryContentT } from "@/lib/assist/schema";
@@ -85,7 +86,9 @@ function Bullets({ items }: { items: string[] }) {
   );
 }
 
-export default function MeetingView({ clientId, meetingId, allowedTags }: { clientId: string; meetingId: string; allowedTags: string[] }) {
+export default function MeetingView({ clientId, meetingId, allowedTags, ownerNames, onlyMine }: {
+  clientId: string; meetingId: string; allowedTags: string[]; ownerNames: string[]; onlyMine: boolean;
+}) {
   const base = `/api/clients/${clientId}/meetings/${meetingId}`;
   const [data, setData] = useState<Data | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -157,7 +160,10 @@ export default function MeetingView({ clientId, meetingId, allowedTags }: { clie
   if (!data) return <main className="px-5 pt-safe"><p className="pt-10 text-muted-foreground">Loading…</p></main>;
 
   const { meeting, summary } = data;
-  const items = data.items.filter((i) => i.id !== undoDelete.hiddenId);
+  const visible = data.items.filter((i) => i.id !== undoDelete.hiddenId);
+  // Only the owner's tasks are listed; tasks for other people from older summaries sit behind a toggle.
+  const items = onlyMine ? visible.filter((i) => isMyTask(i.owner, ownerNames)) : visible;
+  const othersItems = onlyMine ? visible.filter((i) => !isMyTask(i.owner, ownerNames)) : [];
   const s = summary?.content;
   const minutes = minutesBetween(meeting.startedAt, meeting.endedAt);
   const label = (sp: number | null) => (sp === null ? "Speaker" : data.speakerMap[String(sp)] || `Speaker ${sp + 1}`);
@@ -198,6 +204,25 @@ export default function MeetingView({ clientId, meetingId, allowedTags }: { clie
             <button type="button" onClick={addItem} className="mt-2 flex min-h-11 items-center gap-1.5 self-start text-[15px] font-semibold text-link">
               <Plus className="size-4" aria-hidden="true" /> Add action item
             </button>
+            {othersItems.length > 0 && (
+              <details className="mt-4 rounded-xl bg-surface px-4 py-2">
+                <summary className="min-h-10 cursor-pointer py-2 text-[13px] text-muted-foreground">
+                  {othersItems.length} {othersItems.length === 1 ? "task" : "tasks"} for other people, from before tasks were limited to yours
+                </summary>
+                <ul>
+                  {othersItems.map((item) => (
+                    <ItemRow
+                      key={item.id}
+                      item={{ id: item.id, title: item.title, sub: item.owner ?? "No owner", dueDate: item.dueDate, done: item.status === "done" }}
+                      onToggle={() => patchItem(item, { status: item.status === "done" ? "open" : "done" })}
+                      onDue={(date) => patchItem(item, { dueDate: date })}
+                      onOpen={() => setOpenItem(item)}
+                      onDelete={() => undoDelete.remove(item)}
+                    />
+                  ))}
+                </ul>
+              </details>
+            )}
           </section>
   );
 
@@ -274,6 +299,7 @@ export default function MeetingView({ clientId, meetingId, allowedTags }: { clie
               </div>
             )}
             {s.decisions.length > 0 && <Section title="Decisions"><Bullets items={s.decisions} /></Section>}
+            {(s.others_commitments?.length ?? 0) > 0 && <Section title="Others committed to"><Bullets items={s.others_commitments ?? []} /></Section>}
             {s.main_points.length > 0 && <Section title="Main points"><Bullets items={s.main_points} /></Section>}
             {pinned.length > 0 && (
               <Section title="Pinned during the meeting">
@@ -577,6 +603,7 @@ function EditSummary({
                 },
                 free_tags: c.free_tags,
                 participants: c.participants ?? [],
+                others_commitments: c.others_commitments ?? [],
               }, tags);
               setSaving(false);
             }}

@@ -58,6 +58,8 @@ export const SummaryContent = z.object({
   feedback: FeedbackOut,
   free_tags: z.array(z.string()),
   participants: z.array(z.string()).default([]),
+  /** Other people's commitments, kept as notes rather than tasks ("Ali Engel: Start the search (due 2026-11-09)"). */
+  others_commitments: z.array(z.string()).default([]),
 });
 
 export type SummaryContentT = z.infer<typeof SummaryContent>;
@@ -80,6 +82,8 @@ export type CleanLimits = {
   knownBriefTexts?: string[];
   /** Action items kept from one meeting (defaults to maxListItems). */
   maxActionItems?: number;
+  /** When true, only the owner's items become tasks; everyone else's go to the summary as notes. */
+  onlyMine?: boolean;
   /** The owner's names; items assigned to them are stored as "Me". */
   ownerNames?: string[];
 };
@@ -166,9 +170,10 @@ export function cleanOutput(
     },
     free_tags: freeTags,
     participants: [...new Set((out.participants ?? []).map((p) => clip(p, 60)).filter((p) => p && p.toLowerCase() !== "me"))].slice(0, 12),
+    others_commitments: [],
   };
 
-  const actionItems = out.action_items
+  const allItems = out.action_items
     .map((a) => {
       const name = a.owner_name?.trim() || null;
       const owner = a.owner === "me" || isMine(name, l.ownerNames ?? []) ? "Me" : name ?? (a.owner === "them" ? "Them" : null);
@@ -193,7 +198,17 @@ export function cleanOutput(
       }
       return kept;
     }, [])
-    .slice(0, l.maxActionItems ?? l.maxListItems);
+    ;
+
+  // Only the owner's commitments become tasks; the rest are kept as notes on the summary.
+  const mine = l.onlyMine ? allItems.filter((a) => a.owner === "Me") : allItems;
+  const actionItems = mine.slice(0, l.maxActionItems ?? l.maxListItems);
+  if (l.onlyMine) {
+    content.others_commitments = allItems
+      .filter((a) => a.owner !== "Me")
+      .map((a) => clip(`${a.owner && a.owner !== "Them" ? a.owner : "Someone"}: ${a.title}${a.dueDate ? ` (due ${a.dueDate})` : ""}`, l.maxItemChars))
+      .slice(0, l.maxListItems);
+  }
 
   const known = new Set((l.knownBriefTexts ?? []).map(normalizeText));
   const briefUpdates: string[] = [];
