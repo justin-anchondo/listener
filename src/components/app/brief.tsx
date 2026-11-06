@@ -1,9 +1,10 @@
 "use client";
 
-import { Plus, RotateCcw, X } from "lucide-react";
+import { FileUp, Plus, RotateCcw, X } from "lucide-react";
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Drawer, DrawerContent } from "@/components/ui/drawer";
+import { BRIEF_FILE_ACCEPT, briefFileProblem, normalizeBriefText } from "@/lib/brief";
 import { sendJson } from "@/lib/client/directory";
 import { cn } from "@/lib/utils";
 
@@ -24,7 +25,7 @@ const shortDate = (iso: string) => new Date(iso).toLocaleDateString(undefined, {
  * after meetings (and the owner's own notes). The original is never changed
  * automatically; amendments can be dismissed and restored, never rewritten.
  */
-export function BriefPanel({ clientId, projectId }: { clientId: string; projectId: string }) {
+export function BriefPanel({ clientId, projectId, maxChars }: { clientId: string; projectId: string; maxChars: number }) {
   const base = `/api/clients/${clientId}/projects/${projectId}`;
   const [brief, setBrief] = useState<string | null | undefined>(undefined);
   const [amendments, setAmendments] = useState<Amendment[]>([]);
@@ -34,6 +35,22 @@ export function BriefPanel({ clientId, projectId }: { clientId: string; projectI
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [sheetError, setSheetError] = useState<string | null>(null);
+  const [imported, setImported] = useState<string | null>(null);
+  const [dragging, setDragging] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  // Reads a .md or .txt file into the editor; nothing is saved until Save.
+  async function importFile(file: File | undefined) {
+    if (!file) return;
+    const problem = briefFileProblem(file, maxChars);
+    if (problem) return setSheetError(problem);
+    const text = normalizeBriefText(await file.text());
+    if (text.length > maxChars) return setSheetError(`That file has ${text.length.toLocaleString()} characters; a brief can have up to ${maxChars.toLocaleString()}.`);
+    setDraft(text);
+    setImported(file.name);
+    setSheetError(null);
+  }
 
   const load = useCallback(async () => {
     const res = await fetch(base, { cache: "no-store" });
@@ -63,8 +80,15 @@ export function BriefPanel({ clientId, projectId }: { clientId: string; projectI
         ? await sendJson(base, "PATCH", { brief: draft })
         : await sendJson(`${base}/amendments`, "POST", { text: draft });
     setBusy(false);
-    if (!res.ok) return setError(sheet === "brief" ? "Couldn't save the brief." : "Couldn't add the note.");
+    if (!res.ok) {
+      // Shown inside the open sheet, where the owner is looking.
+      return setSheetError(res.status === 400
+        ? `Too long to save. Keep it under ${maxChars.toLocaleString()} characters.`
+        : sheet === "brief" ? "Couldn't save the brief. Check the connection and try again." : "Couldn't add the note.");
+    }
     setSheet(null);
+    setSheetError(null);
+    setImported(null);
     setError(null);
     await load();
   }
@@ -160,27 +184,56 @@ export function BriefPanel({ clientId, projectId }: { clientId: string; projectI
       )}
       {error && <p className="text-sm text-destructive" role="alert">{error}</p>}
 
-      <Drawer open={sheet !== null} onOpenChange={(o) => !o && setSheet(null)}>
+      <Drawer open={sheet !== null} onOpenChange={(o) => { if (!o) { setSheet(null); setSheetError(null); setImported(null); } }} side={sheet === "brief" ? "fullscreen" : "bottom"}>
         <DrawerContent
           title={sheet === "brief" ? "Project brief" : "Add a note"}
-          description={sheet === "brief" ? "Goals, stakeholders, sensitivities, open questions." : "Saved as a dated update. It can be dismissed later but not edited."}
+          description={sheet === "brief" ? "Goals, stakeholders, sensitivities, open questions. Type it, or load a .md file." : "Saved as a dated update. It can be dismissed later but not edited."}
         >
-          <div className="flex flex-col gap-4 pb-2">
+          <div className={cn("flex flex-col gap-3 pb-2", sheet === "brief" && "h-full")}>
+            {sheet === "brief" && (
+              <div className="flex items-center gap-3">
+                <button type="button" onClick={() => fileRef.current?.click()} className="flex min-h-10 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border px-3 text-[14px]">
+                  <FileUp className="size-4" aria-hidden="true" /> Upload .md
+                </button>
+                <input ref={fileRef} type="file" accept={BRIEF_FILE_ACCEPT} className="hidden" onChange={(e) => { void importFile(e.target.files?.[0]); e.target.value = ""; }} />
+                <span className="truncate text-[13px] text-muted-foreground">
+                  {imported ? `Loaded ${imported}. Review, then save.` : <span className="hidden [@media(pointer:fine)]:inline">or drop a file on the text box</span>}
+                </span>
+              </div>
+            )}
             <textarea
               autoFocus
-              rows={sheet === "brief" ? 10 : 4}
+              rows={sheet === "brief" ? 14 : 4}
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
+              onDragOver={(e) => { if (sheet === "brief") { e.preventDefault(); setDragging(true); } }}
+              onDragLeave={() => setDragging(false)}
+              onDrop={(e) => {
+                if (sheet !== "brief") return;
+                e.preventDefault();
+                setDragging(false);
+                void importFile(e.dataTransfer.files?.[0]);
+              }}
               aria-label={sheet === "brief" ? "Project brief" : "Note"}
-              className="rounded-xl border bg-background px-3 py-2.5 text-base outline-none focus:ring-2 focus:ring-ring"
+              className={cn(
+                "rounded-xl border bg-background px-3 py-2.5 text-base outline-none focus:ring-2 focus:ring-ring",
+                sheet === "brief" && "min-h-[45dvh] flex-1 font-mono text-[14px] leading-relaxed",
+                dragging && "border-link ring-2 ring-link/40",
+              )}
             />
+            {sheet === "brief" && (
+              <p className={cn("text-right text-[12px] tabular-nums", draft.length > maxChars ? "font-semibold text-destructive" : "text-muted-foreground")}>
+                {draft.length.toLocaleString()} / {maxChars.toLocaleString()} characters
+              </p>
+            )}
+            {sheetError && <p role="alert" className="text-[14px] text-destructive">{sheetError}</p>}
             <button
               type="button"
-              disabled={busy || (sheet === "note" && !draft.trim())}
+              disabled={busy || (sheet === "note" && !draft.trim()) || (sheet === "brief" && draft.length > maxChars)}
               onClick={save}
               className="min-h-12 rounded-xl bg-primary text-[15px] font-semibold text-primary-foreground disabled:opacity-40"
             >
-              {sheet === "brief" ? "Save brief" : "Add note"}
+              {busy ? "Saving…" : sheet === "brief" ? "Save brief" : "Add note"}
             </button>
           </div>
         </DrawerContent>

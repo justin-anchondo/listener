@@ -28,7 +28,7 @@ storage:                            # SPEC 3.3
   max_segments_per_post: 200
   max_segment_chars: 5000
   max_name_chars: 120               # client and project names
-  max_brief_chars: 8000
+  max_brief_chars: 40000           # project brief (about 6,500 words); also the limit for an imported .md file
   max_logo_bytes: 150000            # client logo after the phone shrinks it
   logo_pixels: 160                  # logos are resized to fit this square before upload
   recent_meetings: 60               # rows on the Meetings tab

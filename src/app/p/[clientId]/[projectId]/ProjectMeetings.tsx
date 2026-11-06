@@ -8,7 +8,7 @@ import { MeetingRow, type MeetingRowData } from "@/components/app/meeting-row";
 import { PageHeader } from "@/components/app/page-header";
 import { type Client, type Project, loadDirectory } from "@/lib/client/directory";
 
-export default function ProjectMeetings({ clientId, projectId }: { clientId: string; projectId: string }) {
+export default function ProjectMeetings({ clientId, projectId, maxBriefChars }: { clientId: string; projectId: string; maxBriefChars: number }) {
   const [meetings, setMeetings] = useState<MeetingRowData[] | null>(null);
   const [client, setClient] = useState<Client | null>(null);
   const [project, setProject] = useState<Project | null>(null);
@@ -42,7 +42,7 @@ export default function ProjectMeetings({ clientId, projectId }: { clientId: str
         )}
       />
       <main className="flex flex-col px-5 pt-4 pb-6 lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)] lg:items-start lg:gap-10">
-        <div className="lg:sticky lg:top-6"><BriefPanel clientId={clientId} projectId={projectId} /></div>
+        <div className="lg:sticky lg:top-6"><BriefPanel clientId={clientId} projectId={projectId} maxChars={maxBriefChars} /></div>
         <section className="flex flex-col">
           <h2 className="mt-6 text-xs font-semibold uppercase tracking-wider text-muted-foreground lg:mt-0">Meetings</h2>
           {error && <p className="text-sm text-destructive" role="alert">{error}</p>}
