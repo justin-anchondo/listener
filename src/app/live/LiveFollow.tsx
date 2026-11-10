@@ -4,7 +4,7 @@ import { Bell, BellOff, ChevronLeft, MessageCircleQuestion, Sparkles } from "luc
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ClientAvatar } from "@/components/app/client-avatar";
-import { KIND, LiveCardList } from "@/components/app/live-cards";
+import { KIND, LiveCardList, useTipReason } from "@/components/app/live-cards";
 import { RecallSheet } from "@/components/app/recall-sheet";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import type { TranscriptEntry } from "@/lib/capture/session";
@@ -54,6 +54,7 @@ export default function LiveFollow({ pollSeconds, mergeGapSeconds, silencePrompt
   const [meeting, setMeeting] = useState<Active | null>(null);
   const [segments, setSegments] = useState<Segment[]>([]);
   const [cards, setCards] = useState<LiveCard[]>([]);
+  const tipReason = useTipReason(meeting?.clientId ?? null);
   const [tipsOn, setTipsOn] = useState(false);
   const [endedAt, setEndedAt] = useState<string | null>(null);
   const [now, setNow] = useState(Date.now());
@@ -342,7 +343,8 @@ export default function LiveFollow({ pollSeconds, mergeGapSeconds, silencePrompt
             </div>
           )}
           {tipsOn && cards.length === 0 && <p className="text-[14px] text-muted-foreground">Tips show up here when something is worth your attention.</p>}
-          <LiveCardList cards={cards} freshIds={fresh} onPin={(c) => void updateCard(c, { pinned: !c.pinned })} onDismiss={(c) => void updateCard(c, { dismissed: true })} />
+          <LiveCardList cards={cards} freshIds={fresh} onPin={(c) => void updateCard(c, { pinned: !c.pinned })} onDismiss={(c) => { void updateCard(c, { dismissed: true }); tipReason.dismissed(c); }} />
+          {tipReason.bar && <div className="sticky bottom-0 pt-2">{tipReason.bar}</div>}
         </aside>
       </div>
 

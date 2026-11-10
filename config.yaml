@@ -100,6 +100,12 @@ recall:                             # SPEC 4.2, BUILD_PLAN 1
   max_question_chars: 500
   max_items: 200                    # action items included in recall context
 
+learning:                           # tasks and tips learn from what you remove, complete, and pin
+  task_feedback_days: 180           # how long a removed/completed task is remembered
+  tip_feedback_days: 30             # tip feedback follows the transcript
+  examples_in_prompt: 12            # recent examples per client shown to the AI
+  min_count_for_habit: 3            # a reason must repeat this often to count as a habit
+
 owner:
   names: ["Justin"]                 # how others refer to me; items owned by these count as "mine"
 

@@ -1,3 +1,4 @@
+import { learnedPreferences } from "@/lib/assist/preferences";
 import { type FastGenerate, fastWithClaude } from "@/lib/assist/claude";
 import { LIVE_SYSTEM, LiveOutput, cleanCards, liveContextBlock, liveUserMessage } from "@/lib/assist/live";
 import { RECALL_SYSTEM, RecallOutput, type RecallAnswer, cleanRecall, recallMaterial } from "@/lib/assist/recall";
@@ -47,7 +48,7 @@ export async function runLiveCheck(
   const maxCards = config.assist.live_max_suggestions;
   const { output, cacheRead } = await generate(LiveOutput, {
     system: LIVE_SYSTEM,
-    context: liveContextBlock(ctx, type.name, type.watchFor, config.owner.names),
+    context: liveContextBlock(ctx, type.name, type.watchFor, config.owner.names, await learnedPreferences(config, clientId, "tip")),
     user: liveUserMessage(lines, ctx.earlier, reason, maxCards),
   }, {
     model: config.models.live,

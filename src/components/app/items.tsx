@@ -56,7 +56,16 @@ const HOLD_MS = 450; // press and hold to edit
 const MOVE_CANCEL_PX = 8; // movement that turns a hold into a scroll or swipe
 const SWIPE_DELETE_PX = 110; // swipe left this far, or fling, to delete
 const FLING_PX_PER_S = 700;
-const UNDO_MS = 4000;
+const UNDO_MS = 6000; // long enough to tap a reason
+
+/** Why a task was deleted; teaches future summaries (fixed values, see policy/feedback). */
+export const TASK_REASON_CHIPS = [
+  { value: "not_mine", label: "Not mine" },
+  { value: "not_a_task", label: "Not a task" },
+  { value: "too_vague", label: "Too vague" },
+  { value: "duplicate", label: "Duplicate" },
+] as const;
+export type TaskReason = (typeof TASK_REASON_CHIPS)[number]["value"];
 
 export function ItemRow({
   item,
@@ -168,32 +177,33 @@ export function ItemRow({
  * is sent when the window closes, when another item is deleted, or when the
  * page goes away.
  */
-export function useUndoDelete<T extends { id: string; title: string }>(commit: (item: T) => Promise<void>) {
+export function useUndoDelete<T extends { id: string; title: string }>(commit: (item: T, reason: TaskReason | null) => Promise<void>) {
   const [pending, setPending] = useState<T | null>(null);
   const ref = useRef<{ item: T; timer: number } | null>(null);
   const commitRef = useRef(commit);
   commitRef.current = commit;
 
-  const flush = useCallback(() => {
+  const flush = useCallback((reason: TaskReason | null = null) => {
     const p = ref.current;
     if (!p) return;
     window.clearTimeout(p.timer);
     ref.current = null;
     setPending(null);
-    void commitRef.current(p.item);
+    void commitRef.current(p.item, reason);
   }, []);
 
   useEffect(() => {
-    window.addEventListener("pagehide", flush);
+    const onHide = () => flush();
+    window.addEventListener("pagehide", onHide);
     return () => {
-      window.removeEventListener("pagehide", flush);
+      window.removeEventListener("pagehide", onHide);
       flush();
     };
   }, [flush]);
 
   const remove = useCallback((item: T) => {
     flush();
-    ref.current = { item, timer: window.setTimeout(flush, UNDO_MS) };
+    ref.current = { item, timer: window.setTimeout(() => flush(), UNDO_MS) };
     setPending(item);
   }, [flush]);
 
@@ -204,9 +214,19 @@ export function useUndoDelete<T extends { id: string; title: string }>(commit: (
   }, []);
 
   const toast = pending ? (
-    <div role="status" className="fixed inset-x-4 bottom-[calc(env(safe-area-inset-bottom)+76px)] z-40 mx-auto flex max-w-md items-center gap-3 rounded-xl bg-foreground px-4 py-3 text-background shadow-lg">
-      <span className="min-w-0 flex-1 truncate text-[14px]">Deleted “{pending.title}”</span>
-      <button type="button" onClick={undo} className="min-h-9 shrink-0 px-2 text-[14px] font-semibold text-background underline underline-offset-2">Undo</button>
+    <div role="status" className="fixed inset-x-4 bottom-[calc(env(safe-area-inset-bottom)+76px)] z-40 mx-auto flex max-w-md flex-col gap-2 rounded-xl bg-foreground px-4 py-3 text-background shadow-lg">
+      <div className="flex items-center gap-3">
+        <span className="min-w-0 flex-1 truncate text-[14px]">Deleted “{pending.title}”</span>
+        <button type="button" onClick={undo} className="min-h-9 shrink-0 px-2 text-[14px] font-semibold text-background underline underline-offset-2">Undo</button>
+      </div>
+      <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Why? (helps future summaries)">
+        <span className="text-[12px] opacity-70">Why?</span>
+        {TASK_REASON_CHIPS.map((r) => (
+          <button key={r.value} type="button" onClick={() => flush(r.value)} className="min-h-8 rounded-full border border-background/30 px-2.5 text-[12px] hover:bg-background/10">
+            {r.label}
+          </button>
+        ))}
+      </div>
     </div>
   ) : null;
 

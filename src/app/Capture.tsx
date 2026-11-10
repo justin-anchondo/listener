@@ -7,7 +7,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ClientAvatar } from "@/components/app/client-avatar";
 import { ClientSheet, useClientSelection } from "@/components/app/client-sheet";
 import { MeetingTypesSheet } from "@/components/app/edit-sheets";
-import { LiveCards, LiveToggle } from "@/components/app/live-cards";
+import { LiveCards, LiveToggle, useTipReason } from "@/components/app/live-cards";
 import { PageHeader } from "@/components/app/page-header";
 import { RecallSheet } from "@/components/app/recall-sheet";
 import { RecorderBar } from "@/components/app/recorder-bar";
@@ -99,6 +99,7 @@ export default function Capture({ settings }: { settings: CaptureSettings }) {
   const active = status === "starting" || status === "live" || status === "reconnecting" || status === "stalled";
   const finishing = saveState === "finishing";
   const busy = active || finishing;
+  const tipReason = useTipReason(selection?.clientId ?? null);
   const live = useLiveAssist({ clientId: selection?.clientId ?? null, meetingId, recording: active && !finishing, enabled: liveOn, entries, settings });
 
   // Live tips on/off and the card list are shared with any screen following
@@ -318,7 +319,8 @@ export default function Capture({ settings }: { settings: CaptureSettings }) {
               </>
             )}
           />
-          {liveOn && <LiveCards cards={live.cards} onPin={live.pin} onDismiss={live.dismiss} />}
+          {liveOn && <LiveCards cards={live.cards} onPin={live.pin} onDismiss={(c) => { void live.dismiss(c); tipReason.dismissed(c); }} />}
+          {liveOn && tipReason.bar && <div className="px-5 pt-2">{tipReason.bar}</div>}
         </div>
 
         <div className="flex flex-col gap-2 px-5 pt-2">

@@ -56,3 +56,11 @@ export async function withRecent<T>(fn: (tx: Tx) => Promise<T>): Promise<T> {
     return fn(tx);
   })) as T;
 }
+
+/** Cross client counts from security definer functions only (no table is readable in this scope). */
+export async function withStats<T>(fn: (tx: Tx) => Promise<T>): Promise<T> {
+  return (await db().begin("read only", async (tx) => {
+    await tx`select set_config('search_path', 'listener', true), set_config('app.scope', 'stats', true)`;
+    return fn(tx);
+  })) as T;
+}

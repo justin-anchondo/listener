@@ -934,3 +934,110 @@ describe.skipIf(!run)("deleting a meeting", () => {
     await expect(deleteMeeting(c, m)).rejects.toThrow(/not found/);
   });
 });
+
+describe.skipIf(!run)("learning from feedback", () => {
+  let app: postgres.Sql;
+  let admin: postgres.Sql;
+  const days = { task: 180, tip: 30 };
+
+  beforeAll(() => {
+    process.env.LISTENER_MASTER_KEY = randomBytes(32).toString("base64");
+    app = postgres(appUrl!, { prepare: false, max: 2 });
+    admin = postgres(adminUrl!, { max: 1, onnotice: () => undefined, connection: { search_path: "listener" } });
+    setDbForTests(app);
+  });
+
+  afterAll(async () => {
+    setDbForTests(undefined);
+    await app.end();
+    await admin.end();
+  });
+
+  beforeEach(async () => {
+    await admin`truncate clients, projects, meetings, transcript_segments, passkeys, audit_log, summaries, action_items, brief_amendments, meeting_types, suggestions, pairings, feedback cascade`;
+  });
+
+  async function itemFor(name: string, title: string) {
+    const { addActionItem } = await import("@/lib/db/summaries");
+    const c = await createClient(name);
+    const p = await createProject(c, "Web");
+    const m = await startMeeting(c, p, "general");
+    const id = await addActionItem(c, m, { title, owner: "Me", dueDate: null, sourceQuote: null, sourceMs: null });
+    return { c, p, m, id };
+  }
+
+  it("keeps each client's removed and kept tasks to that client, encrypted", async () => {
+    const { deleteActionItem, updateActionItem } = await import("@/lib/db/summaries");
+    const { loadClientFeedback } = await import("@/lib/db/feedback");
+    const a = await itemFor("Acme", "Zanzibar follow up");
+    const a2 = await itemFor("Acme Two", "Quokka invoice");
+    const b = await itemFor("Beta", "Beta only task");
+    await deleteActionItem(a.c, a.id, { reason: "not_mine", days });
+    await updateActionItem(a2.c, a2.id, { status: "done" }, days);
+    await expect(deleteActionItem(b.c, a.id, { reason: "too_vague", days })).rejects.toThrow(/not found/);
+
+    expect(await loadClientFeedback(a.c, "task", 12)).toEqual({ removed: [{ text: "Zanzibar follow up", reason: "not_mine" }], kept: [] });
+    expect(await loadClientFeedback(a2.c, "task", 12)).toEqual({ removed: [], kept: ["Quokka invoice"] });
+    expect(await loadClientFeedback(b.c, "task", 12)).toEqual({ removed: [], kept: [] });
+    expect(JSON.stringify(await admin`select * from feedback`)).not.toMatch(/Zanzibar|Quokka/);
+  });
+
+  it("shares only reason counts across clients, and that scope reads no rows", async () => {
+    const { deleteActionItem } = await import("@/lib/db/summaries");
+    const { loadReasonCounts } = await import("@/lib/db/feedback");
+    const { withStats } = await import("@/lib/db/scoped");
+    for (const [name, title] of [["Acme", "Secret one"], ["Beta", "Secret two"]]) {
+      const x = await itemFor(name, title);
+      await deleteActionItem(x.c, x.id, { reason: "not_mine", days });
+    }
+    const counts = await loadReasonCounts("task");
+    expect(counts).toEqual([{ signal: "removed", reason: "not_mine", n: 2 }]);
+    expect(JSON.stringify(counts)).not.toMatch(/Secret/);
+    expect(await withStats((tx) => tx`select * from feedback`)).toHaveLength(0);
+    await expect(withStats((tx) => tx`insert into feedback (id, client_id, kind, source_id, signal, expires_at) values (${randomUUID()}, ${randomUUID()}, 'task', ${randomUUID()}, 'removed', now())`)).rejects.toThrow();
+  });
+
+  it("a reason given after dismissing a tip replaces the first record", async () => {
+    const { saveSuggestions, updateSuggestion } = await import("@/lib/db/live");
+    const { loadClientFeedback } = await import("@/lib/db/feedback");
+    const c = await createClient("Acme");
+    const p = await createProject(c, "Web");
+    const m = await startMeeting(c, p, "general");
+    const [card] = await saveSuggestions(c, m, [{ kind: "question", text: "Ask about hosting.", sourceMs: null }], 30);
+    await updateSuggestion(c, card.id, { dismissed: true }, 30, new Date(), { reason: null, days });
+    await updateSuggestion(c, card.id, { dismissed: true }, 30, new Date(), { reason: "already_known", days });
+    await updateSuggestion(c, card.id, { dismissed: true }, 30, new Date(), { reason: null, days }); // no change, no row
+    expect(await loadClientFeedback(c, "tip", 12)).toEqual({ removed: [{ text: "Ask about hosting.", reason: "already_known" }], kept: [] });
+    expect(await admin`select 1 from feedback`).toHaveLength(1);
+  });
+
+  it("puts this client's feedback in its summary prompt, never another client's", async () => {
+    const { deleteActionItem } = await import("@/lib/db/summaries");
+    const { loadConfig } = await import("@/lib/config");
+    const { summarizeMeeting } = await import("@/lib/assist/post");
+    const a = await itemFor("Acme", "Acme removed task");
+    const b = await itemFor("Beta", "Beta removed task");
+    await deleteActionItem(a.c, a.id, { reason: "too_vague", days });
+    await deleteActionItem(b.c, b.id, { reason: "too_vague", days });
+    await saveSegments(a.c, a.m, [{ seq: 0, speaker: 0, startMs: 0, endMs: 900, text: "Hello there" }], 30);
+    await endMeeting(a.c, a.m, 30);
+    const seen: string[] = [];
+    const empty = { title: "t", purpose: "", summary: "", main_points: [], decisions: [], key_quotes: [], feedback: { went_well: [], suggestions: [], not_covered: [], commitments_by_me: [], open_questions: [] }, free_tags: [], tags: [], participants: [], action_items: [], brief_updates: [], others_commitments: [] };
+    await summarizeMeeting(loadConfig(), a.c, a.m, "America/Los_Angeles", async (prompt: { user: string }) => {
+      seen.push(prompt.user);
+      return { output: empty, model: "fake" } as never;
+    });
+    expect(seen[0]).toContain("<owner_preferences>");
+    expect(seen[0]).toContain("Acme removed task");
+    expect(seen[0]).not.toContain("Beta removed task");
+  });
+
+  it("purges expired feedback", async () => {
+    const { deleteActionItem } = await import("@/lib/db/summaries");
+    const x = await itemFor("Acme", "Old task");
+    await deleteActionItem(x.c, x.id, { reason: null, days });
+    await admin`update feedback set expires_at = now() - interval '1 minute'`;
+    await purgeExpired(30);
+    expect(await admin`select 1 from feedback`).toHaveLength(0);
+  });
+});

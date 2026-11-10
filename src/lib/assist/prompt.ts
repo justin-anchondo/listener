@@ -4,6 +4,8 @@ import { type SpeakerMap, type StatSegment, type TalkStats, speakerLabel } from 
 // transcript is untrusted speech and is fenced as data.
 
 export type PromptInput = {
+  /** What the owner kept and removed before (preferencesBlock); empty for none. */
+  preferences?: string;
   clientName: string;
   projectName: string;
   brief: string | null;
@@ -94,6 +96,7 @@ export function buildPostMeetingPrompt(p: PromptInput): BuiltPrompt {
     talk || "(no speech captured)",
     "</talk_time>",
     "",
+    ...(p.preferences ? ["<owner_preferences>", p.preferences, "</owner_preferences>", ""] : []),
     "<transcript>",
     transcript || "(empty)",
     "</transcript>",

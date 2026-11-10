@@ -124,8 +124,8 @@ export default function MeetingView({ clientId, meetingId, allowedTags, ownerNam
     void load();
   }, [load]);
 
-  const undoDelete = useUndoDelete<Item>(async (item) => {
-    const res = await sendJson(`/api/clients/${clientId}/action-items/${item.id}`, "DELETE");
+  const undoDelete = useUndoDelete<Item>(async (item, reason) => {
+    const res = await sendJson(`/api/clients/${clientId}/action-items/${item.id}${reason ? `?reason=${reason}` : ""}`, "DELETE");
     if (!res.ok && res.status !== 404) setError("Couldn't delete the action item.");
     await load();
   });

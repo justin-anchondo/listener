@@ -2,6 +2,7 @@ import { requireSession } from "@/lib/auth/session";
 import { loadConfig } from "@/lib/config";
 import { type ItemUpdate, deleteActionItem, updateActionItem } from "@/lib/db/summaries";
 import { handle, json, readJson } from "@/lib/http";
+import { cleanFeedbackReason } from "@/lib/policy/feedback";
 import { LimitError, cleanDate, cleanName, cleanText } from "@/lib/policy/limits";
 import { routeIds } from "@/lib/routeIds";
 
@@ -14,7 +15,7 @@ export async function PATCH(request: Request, ctx: Ctx) {
     await requireSession();
     const { clientId, itemId } = routeIds(await ctx.params, "itemId");
     const body = await readJson(request);
-    const { assist, storage } = loadConfig();
+    const { assist, storage, learning } = loadConfig();
     const u: ItemUpdate = {};
     if ("title" in body) u.title = cleanName(body.title, assist.max_item_chars, "title");
     if ("owner" in body) u.owner = cleanText(body.owner, storage.max_name_chars, "owner");
@@ -24,16 +25,19 @@ export async function PATCH(request: Request, ctx: Ctx) {
       if (body.status !== "open" && body.status !== "done") throw new LimitError("status");
       u.status = body.status;
     }
-    await updateActionItem(clientId, itemId, u);
+    await updateActionItem(clientId, itemId, u, { task: learning.task_feedback_days, tip: learning.tip_feedback_days });
     return json({ ok: true });
   });
 }
 
-export async function DELETE(_request: Request, ctx: Ctx) {
+/** Delete a task. An optional ?reason= teaches future summaries what not to create. */
+export async function DELETE(request: Request, ctx: Ctx) {
   return handle("items.delete", async () => {
     await requireSession();
     const { clientId, itemId } = routeIds(await ctx.params, "itemId");
-    await deleteActionItem(clientId, itemId);
+    const reason = cleanFeedbackReason("task", new URL(request.url).searchParams.get("reason") ?? undefined);
+    const { learning } = loadConfig();
+    await deleteActionItem(clientId, itemId, { reason, days: { task: learning.task_feedback_days, tip: learning.tip_feedback_days } });
     return json({ ok: true });
   });
 }

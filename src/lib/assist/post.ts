@@ -1,3 +1,4 @@
+import { learnedPreferences } from "@/lib/assist/preferences";
 import { type Generate, generateWithClaude } from "@/lib/assist/claude";
 import { buildPostMeetingPrompt } from "@/lib/assist/prompt";
 import { cleanOutput } from "@/lib/assist/schema";
@@ -49,6 +50,7 @@ export async function summarizeMeeting(
   const type = await getMeetingType(ctx.template);
   const { date, weekday } = localDate(ctx.startedAt, timeZone);
   const prompt = buildPostMeetingPrompt({
+    preferences: await learnedPreferences(config, clientId, "task"),
     clientName: ctx.clientName,
     projectName: ctx.projectName,
     brief: ctx.brief,

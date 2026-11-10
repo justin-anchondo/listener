@@ -32,7 +32,7 @@ export type WindowLine = { speaker: string; startMs: number; text: string };
 const iso = (d: Date) => d.toISOString().slice(0, 10);
 
 /** The cacheable part: stays byte identical for a meeting until the brief, items, or summaries change. */
-export function liveContextBlock(ctx: LiveContext, typeName: string, watchFor: string[], ownerNames: string[]): string {
+export function liveContextBlock(ctx: LiveContext, typeName: string, watchFor: string[], ownerNames: string[], preferences = ""): string {
   const out = [
     `Client: ${ctx.clientName}`,
     `Project: ${ctx.projectName}`,
@@ -62,6 +62,7 @@ export function liveContextBlock(ctx: LiveContext, typeName: string, watchFor: s
       ].filter(Boolean).join("\n")).join("\n\n")
       : "(none)",
     "</earlier_meetings>",
+    ...(preferences ? ["", "<owner_preferences>", preferences, "</owner_preferences>"] : []),
   ];
   return out.join("\n");
 }

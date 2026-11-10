@@ -45,7 +45,7 @@ Then redeploy. Passkeys belong to one web address, so always use the stable one.
 ### 3b. Phase 3 additions
 
 1. In Supabase **SQL Editor › + New query**, paste all of `db/migrations/0002_summaries.sql` and run it. Then do the same with `db/migrations/0003_brief_amendments.sql`.
-2. Then run `db/migrations/0004_logos_types_recent.sql` the same way (client logos, editable meeting types, recent meetings list), then `db/migrations/0005_live_suggestions.sql` (live tips), then `db/migrations/0006_live_follow.sql` (desktop live view), and then `db/migrations/0007_device_pairing.sql` (computer sign in from the phone).
+2. Then run `db/migrations/0004_logos_types_recent.sql` the same way (client logos, editable meeting types, recent meetings list), then `db/migrations/0005_live_suggestions.sql` (live tips), then `db/migrations/0006_live_follow.sql` (desktop live view), then `db/migrations/0007_device_pairing.sql` (computer sign in from the phone), and then `db/migrations/0008_learning.sql` (tasks and tips learn from what you delete and keep).
 3. In Vercel, add `ANTHROPIC_API_KEY` (Secret) with an API key from console.anthropic.com, then redeploy.
 
 ### 4. First sign in

@@ -80,8 +80,8 @@ export default function OpenItems({ ownerNames, onlyMine }: { ownerNames: string
     }
   }
 
-  const undoDelete = useUndoDelete<OpenItem>(async (item) => {
-    const res = await sendJson(`/api/clients/${item.clientId}/action-items/${item.id}`, "DELETE");
+  const undoDelete = useUndoDelete<OpenItem>(async (item, reason) => {
+    const res = await sendJson(`/api/clients/${item.clientId}/action-items/${item.id}${reason ? `?reason=${reason}` : ""}`, "DELETE");
     if (!res.ok && res.status !== 404) {
       setError("Couldn't delete that item.");
       await load();

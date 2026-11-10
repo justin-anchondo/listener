@@ -3,7 +3,9 @@ import type { SpeakerMap, StatSegment } from "@/lib/assist/stats";
 import { decryptField, encryptField } from "@/lib/crypto/keys";
 import { audit } from "@/lib/db/audit";
 import { NotFoundError, clientKey } from "@/lib/db/keyring";
+import { type FeedbackDays, insertFeedback } from "@/lib/db/feedback";
 import { type Tx, withClient } from "@/lib/db/scoped";
+import type { FeedbackReason } from "@/lib/policy/feedback";
 import { suggestionExpiresAt } from "@/lib/policy/retention";
 
 // Live assistant and recall data (SPEC 4.1, 4.2). Every read here runs in one
@@ -175,16 +177,24 @@ export async function listSuggestions(clientId: string, meetingId: string, pinne
 /** Pin keeps a card with the summary; unpinning puts it back on the transcript's clock. */
 export async function updateSuggestion(
   clientId: string, suggestionId: string, u: { pinned?: boolean; dismissed?: boolean }, days: number, now = new Date(),
+  learn?: { reason: FeedbackReason | null; days: FeedbackDays },
 ): Promise<void> {
-  await withClient(clientId, async (tx) => {
-    const [row] = await tx<{ ended_at: Date | null }[]>`
-      select m.ended_at from suggestions s join meetings m on m.id = s.meeting_id where s.id = ${suggestionId}`;
+  await withClient(clientId, async (tx, id) => {
+    const [row] = await tx<{ ended_at: Date | null; text_enc: string; dismissed: boolean; pinned: boolean }[]>`
+      select m.ended_at, s.text_enc, s.dismissed, s.pinned from suggestions s join meetings m on m.id = s.meeting_id where s.id = ${suggestionId}`;
     if (!row) throw new NotFoundError("suggestion");
     if (u.pinned !== undefined) {
       await tx`update suggestions set pinned = ${u.pinned}, expires_at = ${suggestionExpiresAt(u.pinned, row.ended_at, now, days)}
         where id = ${suggestionId}`;
     }
     if (u.dismissed !== undefined) await tx`update suggestions set dismissed = ${u.dismissed} where id = ${suggestionId}`;
+    // Learning: dismissing (with an optional reason) or pinning a tip.
+    const changed = (u.dismissed === true && !row.dismissed) || (u.pinned === true && !row.pinned) || (u.dismissed === true && learn?.reason);
+    if (learn && changed) {
+      const dek = await clientKey(tx, id);
+      const text = decryptField(dek, { clientId: id, column: SUGGESTION_TEXT, rowId: suggestionId }, row.text_enc);
+      await insertFeedback(tx, dek, id, { kind: "tip", sourceId: suggestionId, signal: u.pinned ? "pinned" : "removed", reason: u.pinned ? null : learn.reason, text }, learn.days);
+    }
   });
 }
 

@@ -3,7 +3,9 @@ import { SummaryContent, normalizeText, type CleanActionItem, type SummaryConten
 import type { SpeakerMap, StatSegment, TalkStats } from "@/lib/assist/stats";
 import { decryptField, encryptField } from "@/lib/crypto/keys";
 import { audit } from "@/lib/db/audit";
+import { type FeedbackDays, insertFeedback } from "@/lib/db/feedback";
 import { NotFoundError, clientKey } from "@/lib/db/keyring";
+import type { FeedbackReason } from "@/lib/policy/feedback";
 import { loadTranscript } from "@/lib/db/meetings";
 import { type Tx, withClient } from "@/lib/db/scoped";
 
@@ -270,9 +272,9 @@ export type ItemUpdate = {
   snoozedUntil?: string | null;
 };
 
-export async function updateActionItem(clientId: string, itemId: string, u: ItemUpdate): Promise<void> {
+export async function updateActionItem(clientId: string, itemId: string, u: ItemUpdate, learn?: FeedbackDays): Promise<void> {
   await withClient(clientId, async (tx, id) => {
-    const [found] = await tx`select 1 from action_items where id = ${itemId}`;
+    const [found] = await tx<{ title_enc: string; status: string }[]>`select title_enc, status from action_items where id = ${itemId}`;
     if (!found) throw new NotFoundError("action item");
     const dek = await clientKey(tx, id);
     const ref = (column: string) => ({ clientId: id, column, rowId: itemId });
@@ -286,13 +288,24 @@ export async function updateActionItem(clientId: string, itemId: string, u: Item
       await tx`update action_items set status = ${u.status},
         closed_at = case when ${u.status} = 'done' then now() else null end where id = ${itemId}`;
     }
+    // Learning: completing or correcting a task says it was a good one.
+    if (learn) {
+      const title = u.title ?? decryptField(dek, { clientId: id, column: ITEM_TITLE, rowId: itemId }, found.title_enc);
+      if (u.status === "done" && found.status !== "done") await insertFeedback(tx, dek, id, { kind: "task", sourceId: itemId, signal: "completed", reason: null, text: title }, learn);
+      else if (u.title !== undefined || u.owner !== undefined) await insertFeedback(tx, dek, id, { kind: "task", sourceId: itemId, signal: "edited", reason: null, text: title }, learn);
+    }
   });
 }
 
-export async function deleteActionItem(clientId: string, itemId: string): Promise<void> {
-  await withClient(clientId, async (tx) => {
-    const rows = await tx`delete from action_items where id = ${itemId} returning id`;
+export async function deleteActionItem(clientId: string, itemId: string, learn?: { reason: FeedbackReason | null; days: FeedbackDays }): Promise<void> {
+  await withClient(clientId, async (tx, id) => {
+    const rows = await tx<{ title_enc: string }[]>`delete from action_items where id = ${itemId} returning title_enc`;
     if (rows.length === 0) throw new NotFoundError("action item");
+    if (learn) {
+      const dek = await clientKey(tx, id);
+      const title = decryptField(dek, { clientId: id, column: ITEM_TITLE, rowId: itemId }, rows[0].title_enc);
+      await insertFeedback(tx, dek, id, { kind: "task", sourceId: itemId, signal: "removed", reason: learn.reason, text: title }, learn.days);
+    }
   });
 }
 

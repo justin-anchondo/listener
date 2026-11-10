@@ -115,6 +115,13 @@ Outputs are saved as soon as they are generated, and the owner can edit them at 
 - The owner can add notes as amendments, and dismiss or restore any amendment. Amendment text can't be edited, so the history stays intact. Regenerating a meeting's summary replaces that meeting's amendments except ones the owner dismissed.
 - Prompts receive the brief plus the most recent active amendments (config `assist.brief_amendments_in_prompt`).
 
+### 4.6 Learning from feedback
+
+- Deleting a task offers one-tap reasons (not mine, not a task, too vague, duplicate); dismissing a live tip offers not useful, already knew, wrong. Reasons are optional and come from a fixed list (`src/lib/policy/feedback.ts`), never free text.
+- Completing or editing a task, and pinning a tip, count as keeping it.
+- Each feedback row belongs to one client and holds the item text encrypted with that client's key. That client's next summaries and live tips get its recent removed and kept examples (config `learning.examples_in_prompt`) in an `<owner_preferences>` block.
+- General habits across clients come only from counts of reasons (a security definer function that returns signal, reason, and count, never text). A reason shows up in prompts once it reaches `learning.min_count_for_habit`.
+
 ## 5. Data Retention
 
 | Data | Retention | Notes |
@@ -125,6 +132,8 @@ Outputs are saved as soon as they are generated, and the owner can edit them at 
 | Action items | Kept until the owner deletes them | Encrypted text, plaintext status and dates |
 | Project briefs and amendments | Kept until the owner deletes them | Encrypted; amendment text is write once |
 | Live suggestion cards | Deleted with the transcript, except pinned cards | Pinned cards follow the summary |
+| Task feedback (section 4.6) | 180 days (config `learning.task_feedback_days`) | Encrypted text, fixed reason |
+| Tip feedback (section 4.6) | 30 days (config `learning.tip_feedback_days`) | Encrypted text, fixed reason |
 | Audit log | 365 days (config) | Ids and event types only, no content |
 
 Rules:
@@ -159,7 +168,8 @@ Rules:
 - Every table holding client data carries `client_id`. Every query filters on it, enforced in the data access layer and by database policy.
 - The client and project picker may list all clients and projects (names only). It is the second cross client view, alongside consolidated open items.
 - The recent meetings list, including the "running now" lookup for the desktop live view, may show meetings across clients: title, participants, client, project, date, and open item count. It never shows transcript, summary body, or brief text, and is never sent to a model. It is the third cross client view.
-- Prompts sent to the model contain data from exactly one client. The consolidated open items view is built from action item fields and is never sent to a model with other clients' data in the same request.
+- Feedback reason counts (section 4.6) are aggregated across clients: numbers per fixed reason only, with no text, ids, or client names.
+- Prompts sent to the model contain data from exactly one client, plus those reason counts. The consolidated open items view is built from action item fields and is never sent to a model with other clients' data in the same request.
 
 ### 6.4 Vendors and keys
 

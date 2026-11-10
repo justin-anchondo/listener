@@ -98,6 +98,12 @@ const configSchema = z.object({
     max_question_chars: z.number().int().positive(),
     max_items: z.number().int().positive(),
   }),
+  learning: z.object({
+    task_feedback_days: z.number().int().positive(),
+    tip_feedback_days: z.number().int().positive(),
+    examples_in_prompt: z.number().int().nonnegative(),
+    min_count_for_habit: z.number().int().positive(),
+  }),
   owner: z.object({ names: z.array(z.string()) }),
   tags: z.array(z.string()),
   templates: z.record(z.string(), z.object({ watch_for: z.array(z.string()) })),

@@ -3,6 +3,7 @@
 import { BellRing, ChevronLeft, ChevronRight, Lightbulb, ListChecks, MessageCircleQuestion, Pin, PinOff, X } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useEffect, useState } from "react";
+import { sendJson } from "@/lib/client/directory";
 import type { LiveCard } from "@/lib/client/live";
 import { cn } from "@/lib/utils";
 
@@ -170,4 +171,44 @@ export function LiveCardList({ cards, onPin, onDismiss, freshIds }: {
       </AnimatePresence>
     </ul>
   );
+}
+
+const TIP_REASON_CHIPS = [
+  { value: "not_useful", label: "Not useful" },
+  { value: "already_known", label: "Already knew" },
+  { value: "wrong", label: "Wrong" },
+] as const;
+const REASON_BAR_MS = 6000;
+
+/**
+ * After a tip is dismissed, a short "Why?" bar. A tap sends the reason, which
+ * teaches this client's future tips; ignoring it is fine.
+ */
+export function useTipReason(clientId: string | null) {
+  const [card, setCard] = useState<LiveCard | null>(null);
+  useEffect(() => {
+    if (!card) return;
+    const t = window.setTimeout(() => setCard(null), REASON_BAR_MS);
+    return () => window.clearTimeout(t);
+  }, [card]);
+
+  function send(reason: (typeof TIP_REASON_CHIPS)[number]["value"]) {
+    const c = card;
+    setCard(null);
+    if (!c || !clientId) return;
+    void sendJson(`/api/clients/${clientId}/suggestions/${c.id}`, "PATCH", { dismissed: true, reason }).catch(() => undefined);
+  }
+
+  const bar = card ? (
+    <div role="status" className="flex flex-wrap items-center gap-1.5 rounded-xl border bg-card px-3 py-2 text-[13px]">
+      <span className="text-muted-foreground">Tip dismissed. Why?</span>
+      {TIP_REASON_CHIPS.map((r) => (
+        <button key={r.value} type="button" onClick={() => send(r.value)} className="min-h-8 rounded-full border px-2.5 text-[12px] hover:bg-muted">
+          {r.label}
+        </button>
+      ))}
+    </div>
+  ) : null;
+
+  return { dismissed: setCard, bar };
 }
