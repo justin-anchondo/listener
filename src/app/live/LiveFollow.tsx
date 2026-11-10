@@ -12,6 +12,7 @@ import { mergeEntries } from "@/lib/capture/merge";
 import { sendJson } from "@/lib/client/directory";
 import type { LiveCard } from "@/lib/client/live";
 import { clock } from "@/lib/format";
+import type { CaptureSettings } from "@/lib/config";
 import { cn } from "@/lib/utils";
 
 type Active = { id: string; clientId: string; clientName: string; logoVersion: number | null; projectName: string; template: string; startedAt: string; liveTips: boolean };
@@ -46,7 +47,9 @@ async function getJson<T>(url: string): Promise<T | null> {
  * stays the microphone; this screen only reads what it saves and shares the
  * tips switch.
  */
-export default function LiveFollow({ pollSeconds, mergeGapSeconds, silencePromptSeconds }: { pollSeconds: number; mergeGapSeconds: number; silencePromptSeconds: number }) {
+export default function LiveFollow({ pollSeconds, mergeGapSeconds, silencePromptSeconds, voiceSettings }: {
+  pollSeconds: number; mergeGapSeconds: number; silencePromptSeconds: number; voiceSettings: CaptureSettings;
+}) {
   const [active, setActive] = useState<Active[] | null>(null);
   const [meeting, setMeeting] = useState<Active | null>(null);
   const [segments, setSegments] = useState<Segment[]>([]);
@@ -343,7 +346,7 @@ export default function LiveFollow({ pollSeconds, mergeGapSeconds, silencePrompt
         </aside>
       </div>
 
-      <RecallSheet open={askOpen} onClose={() => setAskOpen(false)} clientId={meeting.clientId} clientName={meeting.clientName} linkSources={!!endedAt} />
+      <RecallSheet open={askOpen} onClose={() => setAskOpen(false)} clientId={meeting.clientId} clientName={meeting.clientName} linkSources={!!endedAt} voiceSettings={voiceSettings} />
     </div>
   );
 }

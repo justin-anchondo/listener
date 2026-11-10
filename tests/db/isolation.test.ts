@@ -882,3 +882,55 @@ describe.skipIf(!run)("signing in a computer from the phone", () => {
     })).rejects.toThrow(/permission denied/);
   });
 });
+
+describe.skipIf(!run)("deleting a meeting", () => {
+  let app: postgres.Sql;
+  let admin: postgres.Sql;
+
+  beforeAll(() => {
+    process.env.LISTENER_MASTER_KEY = randomBytes(32).toString("base64");
+    app = postgres(appUrl!, { prepare: false, max: 2 });
+    admin = postgres(adminUrl!, { max: 1, onnotice: () => undefined, connection: { search_path: "listener" } });
+    setDbForTests(app);
+  });
+
+  afterAll(async () => {
+    setDbForTests(undefined);
+    await app.end();
+    await admin.end();
+  });
+
+  beforeEach(async () => {
+    await admin`truncate clients, projects, meetings, transcript_segments, passkeys, audit_log, summaries, action_items, brief_amendments, meeting_types, suggestions, pairings cascade`;
+  });
+
+  it("removes the meeting and everything attached, only within its client", async () => {
+    const { deleteMeeting } = await import("@/lib/db/meetings");
+    const { addActionItem, saveGeneratedSummary } = await import("@/lib/db/summaries");
+    const { saveSuggestions } = await import("@/lib/db/live");
+    const c = await createClient("Acme");
+    const p = await createProject(c, "Web");
+    const m = await startMeeting(c, p, "general");
+    await saveSegments(c, m, [{ seq: 0, speaker: 0, startMs: 0, endMs: 1, text: "Hello" }], 30);
+    await saveGeneratedSummary(c, m, "fake", {
+      title: "t", purpose: "", summary: "", main_points: [], decisions: [], key_quotes: [],
+      feedback: { went_well: [], suggestions: [], not_covered: [], commitments_by_me: [], open_questions: [] }, free_tags: [], participants: [], others_commitments: [],
+    }, [], [], ["A fact."]);
+    await addActionItem(c, m, { title: "Do it", owner: "Me", dueDate: null, sourceQuote: null, sourceMs: null });
+    await saveSuggestions(c, m, [{ kind: "question", text: "Ask.", sourceMs: null }], 30);
+    const keep = await startMeeting(c, p, "general");
+
+    const other = await createClient("Beta");
+    await expect(deleteMeeting(other, m)).rejects.toThrow(/not found/);
+    expect(await admin`select id from meetings where id = ${m}`).toHaveLength(1);
+
+    await deleteMeeting(c, m);
+    for (const t of ["meetings", "transcript_segments", "summaries", "action_items", "brief_amendments", "suggestions"]) {
+      const col = t === "meetings" ? "id" : "meeting_id";
+      const rows = await admin.unsafe(`select 1 from listener.${t} where ${col} = $1`, [m]);
+      expect([t, rows.length]).toEqual([t, 0]);
+    }
+    expect(await admin`select id from meetings where id = ${keep}`).toHaveLength(1);
+    await expect(deleteMeeting(c, m)).rejects.toThrow(/not found/);
+  });
+});

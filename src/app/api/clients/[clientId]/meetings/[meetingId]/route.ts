@@ -1,5 +1,6 @@
 import { requireSession } from "@/lib/auth/session";
 import { listAmendments } from "@/lib/db/amendments";
+import { deleteMeeting } from "@/lib/db/meetings";
 import { loadMeetingContext, getMeetingMeta, latestSummary, listMeetingItems } from "@/lib/db/summaries";
 import { handle, json } from "@/lib/http";
 import { routeIds } from "@/lib/routeIds";
@@ -38,5 +39,15 @@ export async function GET(_request: Request, ctx: Ctx) {
       items,
       briefUpdates: briefUpdates.map((a) => ({ id: a.id, text: a.text, dismissed: a.dismissed })),
     });
+  });
+}
+
+/** Deletes the meeting with its transcript, summaries, action items, brief notes, and live cards. */
+export async function DELETE(_request: Request, ctx: Ctx) {
+  return handle("meetings.delete", async () => {
+    await requireSession();
+    const { clientId, meetingId } = routeIds(await ctx.params, "meetingId");
+    await deleteMeeting(clientId, meetingId);
+    return json({ ok: true });
   });
 }

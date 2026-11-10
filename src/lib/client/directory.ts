@@ -1,10 +1,17 @@
 // Browser helpers for the client and project list (names only, SPEC 6.3).
 
+import { cachedFetch, peek } from "@/lib/client/cache";
+
 export type Project = { id: string; name: string; status: "active" | "archived" };
 export type Client = { id: string; name: string; logoVersion: number | null; projects: Project[] };
 
+/** The last loaded client list, if any, for an instant first render. */
+export function peekDirectory(): Client[] | undefined {
+  return peek<{ clients: Client[] }>("/api/directory")?.clients;
+}
+
 export async function loadDirectory(): Promise<Client[]> {
-  const res = await fetch("/api/directory", { cache: "no-store" });
+  const res = await cachedFetch("/api/directory");
   if (res.status === 401) {
     window.location.assign("/");
     return [];

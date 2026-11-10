@@ -90,3 +90,16 @@ export async function loadTranscript(clientId: string, meetingId: string): Promi
     }));
   });
 }
+
+/**
+ * Deletes one meeting and everything that hangs off it (transcript, summary
+ * versions, its action items, brief amendments, live cards) through the
+ * foreign keys' cascades. Scoped to one client like every other write.
+ */
+export async function deleteMeeting(clientId: string, meetingId: string): Promise<void> {
+  await withClient(clientId, async (tx, id) => {
+    const rows = await tx`delete from meetings where id = ${meetingId} returning id`;
+    if (rows.length === 0) throw new NotFoundError("meeting");
+    await audit(tx, "meeting.deleted", { clientId: id, objectId: meetingId });
+  });
+}

@@ -166,7 +166,7 @@ Not started until SPEC section 8 is expanded into a full section.
 
 - Vercel project with environment variables: `DEEPGRAM_API_KEY`, `LISTENER_ACCESS_CODE`, `LISTENER_MASTER_KEY`, `DATABASE_URL` (as `listener_app`), `CRON_SECRET`, and optionally `LISTENER_ORIGIN`. No database service key is used anywhere.
 - Supabase backups: record the plan's backup retention here once the project is created. Effective transcript life is the transcript retention plus this period. Backups hold wrapped data keys, so a deleted client's data stays recoverable from a backup (with the master key) until that backup expires.
-- Database: Supabase project in the region nearest Vercel's functions (US East by default). Connect through the transaction pooler as `listener_app`. Apply `db/migrations` with the SQL editor or `npm run db:migrate`.
+- Database and functions in the same region: Supabase runs in us-west-2 (Oregon), and vercel.json pins functions to pdx1 (Portland) so each query is a short hop. Connect through the transaction pooler as `listener_app`. Apply `db/migrations` with the SQL editor or `npm run db:migrate`.
 - Confirm before production: Deepgram retention terms with `mip_opt_out=true` (opting out removes Deepgram's model improvement discount), Anthropic API data retention terms, and Supabase and Vercel data processing terms.
 
 ## 7. Cost Notes

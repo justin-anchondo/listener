@@ -1,5 +1,7 @@
 "use client";
 
+import { SkeletonBlock } from "@/components/ui/skeleton";
+import { cachedFetch, peek } from "@/lib/client/cache";
 import { Merge, Plus } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
@@ -90,7 +92,7 @@ export default function MeetingView({ clientId, meetingId, allowedTags, ownerNam
   clientId: string; meetingId: string; allowedTags: string[]; ownerNames: string[]; onlyMine: boolean;
 }) {
   const base = `/api/clients/${clientId}/meetings/${meetingId}`;
-  const [data, setData] = useState<Data | null>(null);
+  const [data, setData] = useState<Data | null>(() => peek<Data>(`/api/clients/${clientId}/meetings/${meetingId}`) ?? null);
   const [error, setError] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
   const [tab, setTab] = useState<Tab>("summary");
@@ -112,7 +114,7 @@ export default function MeetingView({ clientId, meetingId, allowedTags, ownerNam
   const [confirmRegen, setConfirmRegen] = useState(false);
 
   const load = useCallback(async () => {
-    const res = await fetch(base, { cache: "no-store" });
+    const res = await cachedFetch(base);
     if (res.status === 401) return window.location.assign("/");
     if (!res.ok) return setError(res.status === 404 ? "Meeting not found." : "Couldn't load this meeting.");
     setData(await res.json());
@@ -157,7 +159,19 @@ export default function MeetingView({ clientId, meetingId, allowedTags, ownerNam
   }
 
   if (error && !data) return <main className="px-5 pt-safe"><p className="pt-10 text-destructive">{error}</p></main>;
-  if (!data) return <main className="px-5 pt-safe"><p className="pt-10 text-muted-foreground">Loading…</p></main>;
+  if (!data) {
+    return (
+      <main aria-busy="true" className="flex flex-col gap-4 px-5 pt-safe">
+        <SkeletonBlock className="mt-14 h-4 w-28" />
+        <SkeletonBlock className="h-8 w-4/5" />
+        <SkeletonBlock className="h-3.5 w-1/2" />
+        <SkeletonBlock className="mt-2 h-10 w-full rounded-xl" />
+        <SkeletonBlock className="h-4 w-full" />
+        <SkeletonBlock className="h-4 w-11/12" />
+        <SkeletonBlock className="h-4 w-3/4" />
+      </main>
+    );
+  }
 
   const { meeting, summary } = data;
   const visible = data.items.filter((i) => i.id !== undoDelete.hiddenId);
@@ -229,7 +243,7 @@ export default function MeetingView({ clientId, meetingId, allowedTags, ownerNam
   return (
     <>
       <PageHeader
-        back={{ href: `/p/${clientId}/${meeting.projectId}`, label: meeting.projectName }}
+        back={{ href: `/c/${clientId}?project=${meeting.projectId}`, label: meeting.projectName }}
         title={s?.title ?? "Meeting"}
         meta={`${meeting.clientName} · ${fmtDateTime(meeting.startedAt)}${minutes ? ` · ${minutes} min` : ""}`}
         actions={meeting.endedAt && (
@@ -326,7 +340,7 @@ export default function MeetingView({ clientId, meetingId, allowedTags, ownerNam
                     </li>
                   ))}
                 </ul>
-                <Link href={`/p/${clientId}/${meeting.projectId}`} className="text-[13px] text-link">See the full brief</Link>
+                <Link href={`/c/${clientId}?project=${meeting.projectId}`} className="text-[13px] text-link">See the full brief</Link>
               </Section>
             )}
             {s.key_quotes.length > 0 && (

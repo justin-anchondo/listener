@@ -1,5 +1,7 @@
 "use client";
 
+import { SkeletonBlock } from "@/components/ui/skeleton";
+import { cachedFetch, peek } from "@/lib/client/cache";
 import { FileUp, Plus, RotateCcw, X } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -27,8 +29,9 @@ const shortDate = (iso: string) => new Date(iso).toLocaleDateString(undefined, {
  */
 export function BriefPanel({ clientId, projectId, maxChars }: { clientId: string; projectId: string; maxChars: number }) {
   const base = `/api/clients/${clientId}/projects/${projectId}`;
-  const [brief, setBrief] = useState<string | null | undefined>(undefined);
-  const [amendments, setAmendments] = useState<Amendment[]>([]);
+  const cached = peek<{ brief: string | null; amendments: Amendment[] }>(base);
+  const [brief, setBrief] = useState<string | null | undefined>(cached?.brief);
+  const [amendments, setAmendments] = useState<Amendment[]>(cached?.amendments ?? []);
   const [expanded, setExpanded] = useState(false);
   const [showDismissed, setShowDismissed] = useState(false);
   const [sheet, setSheet] = useState<"brief" | "note" | null>(null);
@@ -53,7 +56,7 @@ export function BriefPanel({ clientId, projectId, maxChars }: { clientId: string
   }
 
   const load = useCallback(async () => {
-    const res = await fetch(base, { cache: "no-store" });
+    const res = await cachedFetch(base);
     if (!res.ok) return setError("Couldn't load the brief.");
     const body = (await res.json()) as { brief: string | null; amendments: Amendment[] };
     setBrief(body.brief);
@@ -108,7 +111,7 @@ export function BriefPanel({ clientId, projectId, maxChars }: { clientId: string
         )}
       </div>
 
-      {brief === undefined && <p className="text-sm text-muted-foreground">Loading…</p>}
+      {brief === undefined && <span className="flex flex-col gap-2"><SkeletonBlock className="h-3.5 w-full" /><SkeletonBlock className="h-3.5 w-4/5" /><SkeletonBlock className="h-3.5 w-2/3" /></span>}
       {brief === null && (
         <div className="flex flex-col items-start gap-2">
           <p className="text-[14px] text-muted-foreground">

@@ -1,6 +1,7 @@
 import { AppShell } from "@/components/app/app-shell";
 import { requirePageSession } from "@/lib/auth/guard";
-import { loadConfig } from "@/lib/config";
+import { captureSettings, loadConfig } from "@/lib/config";
+import { Suspense } from "react";
 import ClientPage from "./ClientPage";
 
 export const dynamic = "force-dynamic";
@@ -10,7 +11,9 @@ export default async function Page({ params }: { params: Promise<{ clientId: str
   const { clientId } = await params;
   return (
     <AppShell>
-      <ClientPage clientId={clientId} logoPixels={loadConfig().storage.logo_pixels} />
+      <Suspense>
+        <ClientPage clientId={clientId} logoPixels={loadConfig().storage.logo_pixels} maxBriefChars={loadConfig().storage.max_brief_chars} voiceSettings={captureSettings(loadConfig())} />
+      </Suspense>
     </AppShell>
   );
 }

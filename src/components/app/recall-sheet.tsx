@@ -1,13 +1,18 @@
 "use client";
 
-import { ArrowUp, FileText, Users } from "lucide-react";
+import { FileText, Users } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { Drawer, DrawerContent } from "@/components/ui/drawer";
+import { PromptInput } from "@/components/app/prompt-input";
 import { sendJson } from "@/lib/client/directory";
+import { useVoiceInput } from "@/lib/client/voice-input";
+import type { CaptureSettings } from "@/lib/config";
 
 type Source = { ref: string; kind: "meeting" | "project"; label: string; date: string | null; meetingId: string | null };
 type Exchange = { id: number; question: string; state: "asking" | "done" | "error"; found?: boolean; answer?: string; sources?: Source[]; error?: string };
+
+const HINT_KEY = "listener.askHintSeen"; // per device: the explainer shows until the first question
 
 const ERRORS: Record<string, string> = {
   not_configured: "Recall needs ANTHROPIC_API_KEY on the server.",
@@ -24,22 +29,48 @@ function fmtDate(iso: string): string {
  * meetings, briefs, and action items, with sources. While recording, sources
  * are shown without links so the recording screen stays put.
  */
-export function RecallSheet({ open, onClose, clientId, clientName, linkSources }: {
+export function RecallSheet({ open, onClose, clientId, clientName, linkSources, voiceSettings }: {
   open: boolean;
   onClose: () => void;
   clientId: string;
   clientName: string;
   linkSources: boolean;
+  /** Capture settings enable dictation; left out while a recording already uses the mic. */
+  voiceSettings?: CaptureSettings;
 }) {
   const [question, setQuestion] = useState("");
   const [history, setHistory] = useState<Exchange[]>([]);
+  const [hintSeen, setHintSeen] = useState(true);
   const seq = useRef(0);
+  const voice = useVoiceInput(voiceSettings, (text) => setQuestion((q) => (q ? `${q} ${text}` : text)));
+
+  useEffect(() => {
+    try {
+      setHintSeen(localStorage.getItem(HINT_KEY) === "1");
+    } catch {
+      setHintSeen(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!open) voice.stop();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   useEffect(() => setHistory([]), [clientId]);
 
   async function ask() {
+    voice.stop();
     const q = question.trim();
     if (!q) return;
+    if (!hintSeen) {
+      setHintSeen(true);
+      try {
+        localStorage.setItem(HINT_KEY, "1");
+      } catch {
+        // storage unavailable; the hint just shows again next time
+      }
+    }
     const id = ++seq.current;
     setQuestion("");
     setHistory((h) => [{ id, question: q, state: "asking" }, ...h]);
@@ -58,21 +89,15 @@ export function RecallSheet({ open, onClose, clientId, clientName, linkSources }
     <Drawer open={open} onOpenChange={(o) => !o && onClose()}>
       <DrawerContent title={`Ask about ${clientName}`}>
         <div className="flex flex-col gap-4 pb-2">
-          <form className="flex items-end gap-2" onSubmit={(e) => { e.preventDefault(); void ask(); }}>
-            <input
-              autoFocus
-              value={question}
-              onChange={(e) => setQuestion(e.target.value)}
-              enterKeyHint="send"
-              aria-label="Question"
-              placeholder="What did we agree on pricing?"
-              className="min-h-11 min-w-0 flex-1 rounded-xl border bg-background px-3 text-base outline-none focus:ring-2 focus:ring-ring"
-            />
-            <button type="submit" disabled={!question.trim()} aria-label="Ask" className="grid size-11 shrink-0 place-items-center rounded-full bg-primary text-primary-foreground disabled:opacity-40">
-              <ArrowUp className="size-5" aria-hidden="true" />
-            </button>
-          </form>
-          {history.length === 0 && (
+          <PromptInput
+            value={question}
+            onChange={setQuestion}
+            onSubmit={() => void ask()}
+            placeholder="What did we agree on pricing?"
+            voice={voice}
+          />
+          {voice.error && <p role="alert" className="text-[13px] text-destructive">{voice.error}</p>}
+          {history.length === 0 && !hintSeen && (
             <p className="text-[13px] text-muted-foreground">
               Answers come only from {clientName}&apos;s meetings, briefs, and action items, with the meetings they came from.
             </p>

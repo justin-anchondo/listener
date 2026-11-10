@@ -1,5 +1,7 @@
 "use client";
 
+import { SkeletonRows } from "@/components/ui/skeleton";
+import { cachedFetch, peek } from "@/lib/client/cache";
 import { isMine, isMyTask } from "@/lib/owner";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { type ItemPatch, ItemRow, ItemSheet, type SheetItem, useUndoDelete } from "@/components/app/items";
@@ -36,7 +38,7 @@ const DATE_GROUPS: { key: DueGroup; label: string; urgent?: boolean }[] = [
 const VIEW_KEY = "listener.itemsView"; // per device convenience
 
 export default function OpenItems({ ownerNames, onlyMine }: { ownerNames: string[]; onlyMine: boolean }) {
-  const [items, setItems] = useState<OpenItem[] | null>(null);
+  const [items, setItems] = useState<OpenItem[] | null>(() => peek<{ items: OpenItem[] }>("/api/open-items")?.items ?? null);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<Set<string>>(new Set()); // ticked this visit, kept visible so it can be undone
   const [view, setView] = useState<View>("all");
@@ -44,7 +46,7 @@ export default function OpenItems({ ownerNames, onlyMine }: { ownerNames: string
   const [open, setOpen] = useState<OpenItem | null>(null);
 
   const load = useCallback(async () => {
-    const res = await fetch("/api/open-items", { cache: "no-store" });
+    const res = await cachedFetch("/api/open-items");
     if (res.status === 401) return window.location.assign("/");
     if (!res.ok) return setError("Couldn't load open items.");
     setItems(((await res.json()) as { items: OpenItem[] }).items);
@@ -179,7 +181,7 @@ export default function OpenItems({ ownerNames, onlyMine }: { ownerNames: string
 
       <main className="flex flex-col gap-6 px-5 pt-5 lg:grid lg:grid-cols-2 lg:items-start lg:gap-x-10 lg:gap-y-8">
         {error && <p className="text-sm text-destructive" role="alert">{error}</p>}
-        {!items && !error && <p className="text-sm text-muted-foreground">Loading…</p>}
+        {!items && !error && <SkeletonRows count={5} avatar={false} />}
         {items && shown.length === 0 && <p className="text-[15px] text-muted-foreground">Nothing open. Nice.</p>}
         {groups.map((g) => (
           <section key={g.key} aria-label={g.title}>
