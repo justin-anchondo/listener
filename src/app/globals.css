@@ -104,3 +104,9 @@
 
 /* While recording, the tab bar steps aside so the session can't be left by accident. */
 body[data-recording] [data-tabbar] { display: none; }
+
+/* Text Shimmer: a highlight sweeping across muted text (thinking states). */
+@keyframes text-shimmer {
+  from { background-position: 100% center; }
+  to { background-position: 0% center; }
+}
