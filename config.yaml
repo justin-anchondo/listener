@@ -106,6 +106,16 @@ learning:                           # tasks and tips learn from what you remove,
   examples_in_prompt: 12            # recent examples per client shown to the AI
   min_count_for_habit: 3            # a reason must repeat this often to count as a habit
 
+connector:                          # SPEC 6.6: read-only access for Claude, approved with Face ID
+  enabled: true
+  access_token_minutes: 60          # Claude refreshes after this
+  refresh_token_days: 30            # unused this long -> connect again
+  code_seconds: 120                 # the one-time code after approval
+  max_registered_tools: 20          # registrations beyond this are refused
+  redirect_hosts: [claude.ai, claude.com]  # where approvals may send the code (plus localhost)
+  max_meetings_per_list: 100
+  filler_words: [um, uh, like, you know, basically, actually, sort of, kind of, i mean, right]
+
 owner:
   names: ["Justin"]                 # how others refer to me; items owned by these count as "mine"
 

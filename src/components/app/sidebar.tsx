@@ -1,6 +1,6 @@
 "use client";
 
-import { ListChecks, MonitorPlay, NotebookText } from "lucide-react";
+import { ListChecks, MonitorPlay, NotebookText, Plug } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -62,6 +62,13 @@ export function Sidebar() {
           );
         })}
       </ul>
+      <Link
+        href="/connections"
+        aria-current={path.startsWith("/connections") ? "page" : undefined}
+        className={cn("mb-2 flex min-h-9 items-center gap-2.5 rounded-lg px-3 text-[14px]", path.startsWith("/connections") ? "bg-background font-semibold shadow-sm" : "text-muted-foreground hover:bg-background/70")}
+      >
+        <Plug className="size-4" aria-hidden="true" /> Connected tools
+      </Link>
       <div className="flex items-center justify-between border-t px-3 pt-3">
         <span className="text-[12px] text-muted-foreground">Audio is never stored</span>
         <ThemeToggle />

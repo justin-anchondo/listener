@@ -64,3 +64,11 @@ export async function withStats<T>(fn: (tx: Tx) => Promise<T>): Promise<T> {
     return fn(tx);
   })) as T;
 }
+
+/** The Claude connector's OAuth tables only (SPEC 6.6): hashes, no client data. */
+export async function withConnector<T>(fn: (tx: Tx) => Promise<T>): Promise<T> {
+  return (await db().begin(async (tx) => {
+    await tx`select set_config('search_path', 'listener', true), set_config('app.scope', 'connector', true)`;
+    return fn(tx);
+  })) as T;
+}

@@ -1,7 +1,7 @@
 "use client";
 
 import { SkeletonRows } from "@/components/ui/skeleton";
-import { ChevronRight, Plus } from "lucide-react";
+import { ChevronRight, Plug, Plus } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -46,7 +46,14 @@ export default function MeetingsHome() {
 
   return (
     <>
-      <PageHeader title="Meetings" />
+      <PageHeader
+        title="Meetings"
+        actions={
+          <Link href="/connections" aria-label="Connected tools" title="Connected tools" className="grid size-10 place-items-center rounded-full text-muted-foreground hover:bg-muted lg:hidden">
+            <Plug className="size-[18px]" aria-hidden="true" />
+          </Link>
+        }
+      />
       <div className="flex flex-col gap-3 px-5 pt-3">
         {clients && (
           <div className="-mx-5 flex gap-2 overflow-x-auto px-5 pb-1 [scrollbar-width:none]" role="group" aria-label="Filter by client">

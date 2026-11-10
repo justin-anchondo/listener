@@ -45,7 +45,7 @@ Then redeploy. Passkeys belong to one web address, so always use the stable one.
 ### 3b. Phase 3 additions
 
 1. In Supabase **SQL Editor › + New query**, paste all of `db/migrations/0002_summaries.sql` and run it. Then do the same with `db/migrations/0003_brief_amendments.sql`.
-2. Then run `db/migrations/0004_logos_types_recent.sql` the same way (client logos, editable meeting types, recent meetings list), then `db/migrations/0005_live_suggestions.sql` (live tips), then `db/migrations/0006_live_follow.sql` (desktop live view), then `db/migrations/0007_device_pairing.sql` (computer sign in from the phone), and then `db/migrations/0008_learning.sql` (tasks and tips learn from what you delete and keep).
+2. Then run `db/migrations/0004_logos_types_recent.sql` the same way (client logos, editable meeting types, recent meetings list), then `db/migrations/0005_live_suggestions.sql` (live tips), then `db/migrations/0006_live_follow.sql` (desktop live view), then `db/migrations/0007_device_pairing.sql` (computer sign in from the phone), then `db/migrations/0008_learning.sql` (tasks and tips learn from what you delete and keep), and then `db/migrations/0009_connector.sql` (read-only Claude connector).
 3. In Vercel, add `ANTHROPIC_API_KEY` (Secret) with an API key from console.anthropic.com, then redeploy.
 
 ### 4. First sign in
@@ -78,6 +78,10 @@ After **Stop**, the summary and action items are generated automatically (usuall
 **Project brief:** open a project (Meetings tab) to write its brief (up to 40,000 characters), or tap **Upload .md** in the editor to load a Markdown or text file (on a computer you can also drop the file on the text box). The file's text goes into the editor for you to check before saving; the file itself isn't stored. After each meeting, new lasting facts are added under **Updates** with the date and a link to the meeting. Your brief itself is never changed automatically. Dismiss an update with **×** (it stays in the history and can be restored), or add your own with **+ Note**.
 
 **Open items** lists everything still open: **All clients** groups by due date (overdue, today, next 7 days, later, no date, snoozed); **By client** groups by client with open and overdue counts. Each item has a due date chip (red overdue, amber due soon); tap it to pick a date. Tap an item to edit it, snooze it a week, or open its meeting.
+
+**Learning:** when you delete an action item, the undo bar asks **Why?** (Not mine, Not a task, Too vague, Duplicate); when you dismiss a live tip, a small bar asks the same (Not useful, Already knew, Wrong). Tapping a reason is optional. Completing or editing a task, and pinning a tip, count as keeping it. Each client's next summaries and tips learn from that client's own examples; across clients only the reason counts are shared (no text). Settings are under `learning:` in `config.yaml`.
+
+**Claude connector (read only):** to analyze calls in Claude (speaking patterns, language, coaching), open **Connected tools** (the plug icon on Meetings, or the sidebar on a computer), copy the address, and in Claude go to **Settings → Connectors → Add custom connector** and paste it. Claude opens Listener: sign in if asked, then **Approve with Face ID** (on a computer without Windows Hello or Touch ID set up, do this step on the phone). Claude can then list clients and meetings and read summaries, full transcripts (while they're still kept), and speaking stats per speaker (talk share, pace, turns, longest monologue, questions, filler words, cut-ins). It can't change anything. Every read is logged by id, and **Disconnect** cuts it off immediately. What Claude keeps follows your Claude account's own data settings.
 
 Transcripts and unpinned live tips are kept 30 days after the meeting ends, then deleted by a daily job. Summaries, action items, and pinned tips are kept. Audio is never stored.
 

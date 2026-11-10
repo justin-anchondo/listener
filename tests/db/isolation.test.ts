@@ -1041,3 +1041,123 @@ describe.skipIf(!run)("learning from feedback", () => {
     expect(await admin`select 1 from feedback`).toHaveLength(0);
   });
 });
+
+describe.skipIf(!run)("Claude connector", () => {
+  let app: postgres.Sql;
+  let admin: postgres.Sql;
+
+  beforeAll(() => {
+    process.env.LISTENER_MASTER_KEY = randomBytes(32).toString("base64");
+    app = postgres(appUrl!, { prepare: false, max: 2 });
+    admin = postgres(adminUrl!, { max: 1, onnotice: () => undefined, connection: { search_path: "listener" } });
+    setDbForTests(app);
+  });
+
+  afterAll(async () => {
+    setDbForTests(undefined);
+    await app.end();
+    await admin.end();
+  });
+
+  beforeEach(async () => {
+    await admin`truncate clients, projects, meetings, transcript_segments, passkeys, audit_log, summaries, action_items, brief_amendments, meeting_types, suggestions, pairings, feedback, oauth_clients, oauth_codes, oauth_grants cascade`;
+  });
+
+  const now = new Date();
+  const hour = new Date(now.getTime() + 3_600_000);
+  const month = new Date(now.getTime() + 30 * 86_400_000);
+
+  async function connected() {
+    const db = await import("@/lib/db/connector");
+    const id = "claude_client_id_0001";
+    await db.registerOAuthClient({ id, name: "Claude", redirectUris: ["https://claude.ai/cb"] });
+    await db.saveCode({ codeHash: "code-hash", oauthClientId: id, redirectUri: "https://claude.ai/cb", codeChallenge: "x".repeat(43), expiresAt: hour });
+    expect(await db.redeemCode("code-hash", (row) => row?.oauthClientId === id, { accessHash: "a1", refreshHash: "r1", accessExpiresAt: hour, refreshExpiresAt: month }, now)).toBe(true);
+    return { db, id };
+  }
+
+  it("keeps OAuth tables in the connector scope only, and that scope reads no client data", async () => {
+    const { withConnector, withAuth, withDirectory } = await import("@/lib/db/scoped");
+    await connected();
+    await createClient("Acme");
+    expect(await withAuth((tx) => tx`select * from oauth_grants`)).toHaveLength(0);
+    expect(await withDirectory((tx) => tx`select * from oauth_clients`)).toHaveLength(0);
+    expect(await withConnector((tx) => tx`select * from clients`)).toHaveLength(0);
+    expect(await withConnector((tx) => tx`select * from transcript_segments`)).toHaveLength(0);
+    await expect(withConnector((tx) => tx`delete from oauth_grants`)).rejects.toThrow(/permission denied/);
+    await expect(withConnector((tx) => tx`update oauth_codes set code_challenge = 'y'`)).rejects.toThrow(/permission denied/);
+  });
+
+  it("redeems a code once, rotates refresh tokens, and revokes", async () => {
+    const { db, id } = await connected();
+    expect(await db.redeemCode("code-hash", () => true, { accessHash: "a2", refreshHash: "r2", accessExpiresAt: hour, refreshExpiresAt: month }, now)).toBe(false);
+    expect((await admin`select used_at from oauth_codes`)[0].used_at).not.toBeNull();
+    const g = await db.grantForAccess("a1", now);
+    expect(g?.revokedAt).toBeNull();
+    expect(await db.rotateGrant("r1", (x) => !!x, { accessHash: "a3", refreshHash: "r3", accessExpiresAt: hour })).toBe(true);
+    expect(await db.rotateGrant("r1", (x) => !!x, { accessHash: "a4", refreshHash: "r4", accessExpiresAt: hour })).toBe(false);
+    expect(await db.grantForAccess("a1", now)).toBeNull();
+    const list = await db.listConnections(now);
+    expect(list.map((c) => c.toolName)).toEqual(["Claude"]);
+    expect(await db.revokeConnection(list[0].id, now)).toBe(true);
+    expect((await db.grantForAccess("a3", now))?.revokedAt).not.toBeNull();
+    expect(await db.listConnections(now)).toEqual([]);
+    expect(await db.getOAuthClient(id)).toEqual({ id, name: "Claude", redirectUris: ["https://claude.ai/cb"] });
+  });
+
+  it("serves tools for one client at a time and logs ids only", async () => {
+    const { loadConfig } = await import("@/lib/config");
+    const { handleRpc } = await import("@/lib/connector/mcp");
+    const a = await createClient("Acme");
+    const ap = await createProject(a, "Website");
+    const am = await startMeeting(a, ap, "general");
+    await saveSegments(a, am, [
+      { seq: 0, speaker: 0, startMs: 0, endMs: 12_000, text: "Um so basically the Zanzibar price is fixed?" },
+      { seq: 1, speaker: 1, startMs: 12_500, endMs: 20_000, text: "Yes, forty." },
+    ], 30);
+    await endMeeting(a, am, 30);
+    const b = await createClient("Beta");
+    const ctx = { config: loadConfig(), grantId: randomUUID() };
+    const call = async (name: string, args: Record<string, unknown>) => {
+      const r = await handleRpc({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args } }, ctx);
+      return r!.result as { content: { text: string }[]; isError: boolean };
+    };
+
+    const init = await handleRpc({ jsonrpc: "2.0", id: 0, method: "initialize", params: { protocolVersion: "2025-06-18" } }, ctx);
+    expect((init!.result as { protocolVersion: string }).protocolVersion).toBe("2025-06-18");
+    expect(await handleRpc({ jsonrpc: "2.0", method: "notifications/initialized" }, ctx)).toBeNull();
+    const tools = (await handleRpc({ jsonrpc: "2.0", id: 2, method: "tools/list" }, ctx))!.result as { tools: { name: string }[] };
+    expect(tools.tools.map((t) => t.name)).toEqual(["list_clients", "list_meetings", "get_summary", "get_transcript", "get_speaking_stats"]);
+
+    expect(JSON.parse((await call("list_clients", {})).content[0].text).map((c: { name: string }) => c.name)).toEqual(["Acme", "Beta"]);
+    const meetings = JSON.parse((await call("list_meetings", { client_id: a })).content[0].text);
+    expect(meetings.map((m: { meeting_id: string }) => m.meeting_id)).toEqual([am]);
+    expect(JSON.parse((await call("list_meetings", { client_id: b })).content[0].text)).toEqual([]);
+    const t = JSON.parse((await call("get_transcript", { client_id: a, meeting_id: am })).content[0].text);
+    expect(t.transcript).toContain("Zanzibar price is fixed?");
+    const stats = JSON.parse((await call("get_speaking_stats", { client_id: a, meeting_id: am })).content[0].text);
+    expect(stats.speakers[0].fillers.total).toBeGreaterThan(0);
+
+    const crossed = await call("get_transcript", { client_id: b, meeting_id: am });
+    expect(crossed.isError).toBe(true);
+    expect(crossed.content[0].text).not.toMatch(/Zanzibar/);
+    const bad = await handleRpc({ jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "delete_everything", arguments: {} } }, ctx);
+    expect(bad!.error?.code).toBe(-32602);
+
+    const audit = await admin`select event, client_id, object_id from audit_log where event like 'connector.tool.%' order by id`;
+    expect(audit.map((r) => r.event)).toEqual([
+      "connector.tool.list_clients", "connector.tool.list_meetings", "connector.tool.list_meetings", "connector.tool.get_transcript", "connector.tool.get_speaking_stats",
+    ]);
+    expect(audit[3].client_id).toBe(a);
+    expect(audit[3].object_id).toBe(am);
+  });
+
+  it("purges used codes and expired grants", async () => {
+    await connected();
+    await admin`update oauth_codes set expires_at = now() - interval '2 days'`;
+    await admin`update oauth_grants set refresh_expires_at = now() - interval '1 minute'`;
+    await purgeExpired(30);
+    expect(await admin`select 1 from oauth_codes`).toHaveLength(0);
+    expect(await admin`select 1 from oauth_grants`).toHaveLength(0);
+  });
+});

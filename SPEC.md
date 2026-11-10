@@ -169,13 +169,24 @@ Rules:
 - The client and project picker may list all clients and projects (names only). It is the second cross client view, alongside consolidated open items.
 - The recent meetings list, including the "running now" lookup for the desktop live view, may show meetings across clients: title, participants, client, project, date, and open item count. It never shows transcript, summary body, or brief text, and is never sent to a model. It is the third cross client view.
 - Feedback reason counts (section 4.6) are aggregated across clients: numbers per fixed reason only, with no text, ids, or client names.
+- The Claude connector (section 6.6) may list client and project names; every other tool reads exactly one client per call.
 - Prompts sent to the model contain data from exactly one client, plus those reason counts. The consolidated open items view is built from action item fields and is never sent to a model with other clients' data in the same request.
 
 ### 6.4 Vendors and keys
 
-- Approved data processors: transcription vendor, model provider, database host, web host. Nothing else receives client data.
+- Approved data processors: transcription vendor, model provider, database host, web host, and Claude through the owner approved connector (section 6.6). Nothing else receives client data.
 - Vendor keys stay on the server. The phone gets short lived tokens scoped to transcription only.
 - Before production use, the owner confirms each vendor's current data retention and training terms. Opt outs are applied where offered.
+
+### 6.6 Claude connector (read only)
+
+- Claude can read meeting data for coaching and analysis through an MCP server at `/api/mcp`. The owner adds it in Claude as a custom connector.
+- Authorization is OAuth 2.1: dynamic client registration for public clients only, authorization code with PKCE (S256 only), redirects only to the hosts in `connector.redirect_hosts` over https (or localhost). Registering grants nothing.
+- Every connection needs the owner's approval on `/connect`: a signed in session and a fresh passkey (Face ID) check.
+- Access tokens last `connector.access_token_minutes`; refresh tokens rotate on each use and expire after `connector.refresh_token_days`. Codes work once within `connector.code_seconds`. Only SHA-256 hashes of codes and tokens are stored, in a `connector` database scope that can read no client data.
+- Tools are read only: list clients (names), list one client's meetings, and for one meeting its summary, full transcript (while retained, including other participants' words), and speaking patterns computed in code. Every tool that reads client data takes one `client_id` and reads through that client's scope.
+- Every tool call is written to the audit log with the tool name, client id, and meeting id only. The owner sees connected tools at `/connections` and can disconnect any of them; tokens stop working on the next call.
+- Data read by Claude follows Claude's own retention and training settings for the owner's account, which differ from the API terms in section 6.4. Setting `connector.enabled: false` turns every connector endpoint off.
 
 ### 6.5 Logging
 
