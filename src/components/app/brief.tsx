@@ -2,7 +2,7 @@
 
 import { SkeletonBlock } from "@/components/ui/skeleton";
 import { cachedFetch, peek } from "@/lib/client/cache";
-import { FileUp, Plus, RotateCcw, X } from "lucide-react";
+import { FileUp, Pencil, Plus, RotateCcw, X } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Drawer, DrawerContent } from "@/components/ui/drawer";
@@ -20,6 +20,8 @@ type Amendment = {
   meetingTitle: string | null;
 };
 
+const UPDATES_SHOWN = 3;
+
 const shortDate = (iso: string) => new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
 
 /**
@@ -34,6 +36,7 @@ export function BriefPanel({ clientId, projectId, maxChars }: { clientId: string
   const [amendments, setAmendments] = useState<Amendment[]>(cached?.amendments ?? []);
   const [expanded, setExpanded] = useState(false);
   const [showDismissed, setShowDismissed] = useState(false);
+  const [showAllUpdates, setShowAllUpdates] = useState(false);
   const [sheet, setSheet] = useState<"brief" | "note" | null>(null);
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
@@ -98,37 +101,34 @@ export function BriefPanel({ clientId, projectId, maxChars }: { clientId: string
 
   const active = amendments.filter((a) => !a.dismissed);
   const dismissed = amendments.filter((a) => a.dismissed);
-  const long = (brief ?? "").length > 280 || (brief ?? "").split("\n").length > 5;
+  const long = (brief ?? "").length > 220 || (brief ?? "").split("\n").length > 4;
+  // Newest updates first; only a few until asked for the rest.
+  const newestFirst = [...active].reverse();
+  const shownUpdates = showAllUpdates ? newestFirst : newestFirst.slice(0, UPDATES_SHOWN);
 
   return (
     <section aria-label="Project brief" className="flex flex-col gap-3 rounded-2xl bg-surface p-4">
       <div className="flex items-center justify-between">
         <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Brief</h2>
-        {brief && (
-          <button type="button" className="min-h-9 text-[14px] text-link" onClick={() => { setDraft(brief); setSheet("brief"); }}>
-            Edit
+        {brief !== undefined && (
+          <button
+            type="button"
+            className="flex min-h-8 items-center gap-1 text-[13px] text-link"
+            onClick={() => { setDraft(brief ?? ""); setSheet("brief"); }}
+          >
+            {brief ? <Pencil className="size-3.5" aria-hidden="true" /> : <Plus className="size-3.5" aria-hidden="true" />}
+            {brief ? "Edit brief" : "Add brief"}
           </button>
         )}
       </div>
 
       {brief === undefined && <span className="flex flex-col gap-2"><SkeletonBlock className="h-3.5 w-full" /><SkeletonBlock className="h-3.5 w-4/5" /><SkeletonBlock className="h-3.5 w-2/3" /></span>}
       {brief === null && (
-        <div className="flex flex-col items-start gap-2">
-          <p className="text-[14px] text-muted-foreground">
-            Goals, stakeholders, sensitivities, open questions. Summaries and the live assistant use this to make sense of your meetings.
-          </p>
-          <button
-            type="button"
-            onClick={() => { setDraft(""); setSheet("brief"); }}
-            className="min-h-10 rounded-xl bg-primary px-4 text-[14px] font-semibold text-primary-foreground"
-          >
-            Add a brief
-          </button>
-        </div>
+        <p className="text-[13px] text-muted-foreground">No brief yet. Goals, people, and open questions give summaries and tips context.</p>
       )}
       {brief && (
         <div>
-          <p className={cn("whitespace-pre-line text-[15px] leading-relaxed", !expanded && long && "line-clamp-5")}>{brief}</p>
+          <p className={cn("whitespace-pre-line text-[15px] leading-relaxed", !expanded && long && "line-clamp-4")}>{brief}</p>
           {long && (
             <button type="button" className="min-h-9 text-[14px] text-link" onClick={() => setExpanded((v) => !v)}>
               {expanded ? "Show less" : "Show more"}
@@ -149,7 +149,7 @@ export function BriefPanel({ clientId, projectId, maxChars }: { clientId: string
             <p className="text-[13px] text-muted-foreground">New facts from your meetings are added here automatically. Your brief above is never changed.</p>
           )}
           <ul className="flex flex-col gap-2.5">
-            {active.map((a) => (
+            {shownUpdates.map((a) => (
               <li key={a.id} className="flex items-start gap-2">
                 <div className="flex min-w-0 flex-1 flex-col gap-0.5">
                   <span className="text-[15px] leading-snug">{a.text}</span>
@@ -166,6 +166,11 @@ export function BriefPanel({ clientId, projectId, maxChars }: { clientId: string
               </li>
             ))}
           </ul>
+          {active.length > UPDATES_SHOWN && (
+            <button type="button" className="min-h-9 self-start text-[13px] text-link" onClick={() => setShowAllUpdates((v) => !v)}>
+              {showAllUpdates ? "Show fewer" : `Show all ${active.length}`}
+            </button>
+          )}
           {dismissed.length > 0 && (
             <button type="button" className="min-h-9 self-start text-[13px] text-muted-foreground" onClick={() => setShowDismissed((v) => !v)}>
               {showDismissed ? "Hide" : "Show"} {dismissed.length} dismissed
